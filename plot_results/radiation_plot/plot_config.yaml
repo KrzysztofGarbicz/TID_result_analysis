@@ -24,6 +24,19 @@
 #   include_doses      : keep only these doses (kRad), drop the rest
 #   exclude_doses      : drop these doses
 #   exclude_sn         : drop these specific serial numbers
+#   lot                : keep only samples from this production lot
+#                        (e.g. "A" / "B" - see `lots:` in dose_map.yaml)
+#   bias               : keep only "bias" or "unbias" samples
+#                        (see `bias_groups:` in dose_map.yaml)
+#   split_by           : emit one PNG per group along this dimension.
+#                        Accepts "lot", "bias", or both: [lot, bias].
+#                        Combines with `variants:`.
+#   x_scale / y_scale  : "linear" (default), "log", or "symlog".
+#                        On annealing plots only y_scale is honoured
+#                        (the X axis is categorical: stage names).
+#
+# Delta plots are always rendered as relative percent change. Any
+# `delta_mode` field in this file is ignored.
 #
 # Axis limits, titles, labels are optional - if omitted matplotlib auto.
 # =============================================================================
@@ -82,25 +95,34 @@ plots:
 
   - name: "TPS2553_iq_delta"
     type: delta
+    title: "TPS2553 - Delta I_Q (after - before) [%]"
+    lcl_name: TPS2553
+    measurement_type: iquiescent
+    metric: iq_ua
+    delta_from: before_irradiate
+    delta_to: after_irradiate
+
+  # Same delta, but split into 4 PNGs: per (lot, bias) combination.
+  - name: "TPS2553_iq_delta_by_lot_bias"
+    type: delta
     title: "TPS2553 - Delta I_Q (after - before)"
     lcl_name: TPS2553
     measurement_type: iquiescent
     metric: iq_ua
     delta_from: before_irradiate
     delta_to: after_irradiate
-    delta_mode: absolute        # "absolute" or "relative_percent"
-    y_label: "delta I_Q [uA]"
+    split_by: [lot, bias]
 
-  - name: "TPS2553_iq_delta_relative"
-    type: delta
-    title: "TPS2553 - Relative change in I_Q"
+  # Absolute plot with log X-axis (helpful when dose spans 1..40 kRad).
+  - name: "TPS2553_iq_absolute_logdose"
+    type: absolute
+    title: "TPS2553 - I_Q vs dose (log dose)"
     lcl_name: TPS2553
     measurement_type: iquiescent
     metric: iq_ua
-    delta_from: before_irradiate
-    delta_to: after_irradiate
-    delta_mode: relative_percent
-    y_label: "delta I_Q [%]"
+    stages: [before_irradiate, after_irradiate]
+    y_label: "I_Q [uA]"
+    x_scale: log
 
   # Same data, two views via variants (one stats-only PNG, one points-only PNG)
   - name: "TPS2553_iq_views"
@@ -200,6 +222,22 @@ plots:
       - annealing_168h_100c
     include_doses: [15, 25]
     y_label: "I_Q [uA]"
+
+  # Annealing split per lot (-> two PNGs: ..._lotA, ..._lotB).
+  - name: "TPS25963_iq_annealing_by_lot"
+    type: annealing
+    title: "TPS25963 - I_Q annealing per lot"
+    lcl_name: TPS25963
+    measurement_type: iquiescent
+    metric: iq_ua
+    stages_order:
+      - before_irradiate
+      - after_irradiate
+      - annealing_24h_25c
+      - annealing_168h_25c
+      - annealing_168h_100c
+    y_label: "I_Q [uA]"
+    split_by: lot
 
   - name: "TPS25963_rdson_annealing"
     type: annealing

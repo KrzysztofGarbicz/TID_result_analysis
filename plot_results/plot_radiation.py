@@ -148,6 +148,8 @@ def _dry_run_report(
             exclude_reference=(
                 reference_sns if spec["type"] != "annealing" else None
             ),
+            lot=spec.get("lot"),
+            bias=spec.get("bias"),
         )
         n = len(filtered)
         note = ""
@@ -215,18 +217,37 @@ def main() -> int:
     logging.info("output_dir     : %s", output_dir)
 
     try:
-        dose_map, reference_sns = cfg.load_dose_map(dose_map_path)
+        dose_map, reference_sns, lot_by_sn, bias_by_sn = cfg.load_dose_map(
+            dose_map_path
+        )
     except cfg.ConfigError as exc:
         logging.error("Dose map error: %s", exc)
         return 2
 
     try:
-        master_df = dl.build_master_dataframe(flat_dir, dose_map)
+        master_df = dl.build_master_dataframe(
+            flat_dir,
+            dose_map,
+            lot_by_sn=lot_by_sn,
+            bias_by_sn=bias_by_sn,
+        )
     except (FileNotFoundError, RuntimeError) as exc:
         logging.error("Data loading failed: %s", exc)
         return 2
 
-    plot_specs = _filter_specs_by_only(plot_config["plots"], args.only)
+    # Expand any `split_by:` entries now that we know which lot / bias
+    # groups actually exist.
+    try:
+        expanded = cfg.expand_splits(
+            plot_config["plots"],
+            lot_values=sorted(set(lot_by_sn.values())),
+            bias_values=sorted(set(bias_by_sn.values())),
+        )
+    except cfg.ConfigError as exc:
+        logging.error("Plot config error during split expansion: %s", exc)
+        return 2
+
+    plot_specs = _filter_specs_by_only(expanded, args.only)
     if not plot_specs:
         logging.error("No plots to render after applying --only filter.")
         return 1

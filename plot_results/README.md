@@ -74,9 +74,9 @@ Required: `lcl_name`, `measurement_type`, `metric`, `stages`.
 ### `delta`
 
 Per-SN change between `delta_from` and `delta_to`, plotted against dose.
-`delta_mode` is `absolute` (default) or `relative_percent`. Only SNs
-that have measurements in both stages contribute. A reference line at
-zero is drawn automatically.
+Always rendered as **relative percent change** — any `delta_mode` field
+in the YAML is ignored. Only SNs that have measurements in both stages
+contribute. A reference line at zero is drawn automatically.
 
 Required: `lcl_name`, `measurement_type`, `metric`, `delta_from`,
 `delta_to`.
@@ -115,13 +115,41 @@ plot's settings, then overrides them with its own fields.
 
 Available on every plot:
 
-| Field            | Effect                                               |
-|------------------|------------------------------------------------------|
-| `context_key`    | Restrict to one variant (e.g. `iload_a=1.0`)         |
-| `exclude_sn`     | Drop specific serial numbers from this plot only     |
-| `include_doses`  | Keep only the listed doses (kRad)                    |
-| `exclude_doses`  | Drop the listed doses                                |
-| `x_lim`, `y_lim` | Two-element lists; omitting them = matplotlib auto   |
+| Field              | Effect                                               |
+|--------------------|------------------------------------------------------|
+| `context_key`      | Restrict to one variant (e.g. `iload_a=1.0`)         |
+| `exclude_sn`       | Drop specific serial numbers from this plot only     |
+| `include_doses`    | Keep only the listed doses (kRad)                    |
+| `exclude_doses`    | Drop the listed doses                                |
+| `lot`              | Keep only one lot, e.g. `A` or `B`                   |
+| `bias`             | Keep only `bias` or `unbias` samples                 |
+| `x_lim`, `y_lim`   | Two-element lists; omitting them = matplotlib auto   |
+| `x_scale`,`y_scale`| `linear` (default), `log`, or `symlog`               |
+
+> On `annealing` plots the X axis is categorical (stage names), so
+> `x_scale` is ignored; `y_scale` works as expected.
+
+## Splitting into lot / bias panels
+
+Use `split_by:` to emit one PNG per group along the listed dimension(s)
+without writing the same plot block several times:
+
+```yaml
+- name: "TPS2553_iq_delta_by_lot_bias"
+  type: delta
+  ...
+  split_by: [lot, bias]   # -> 4 PNGs: _lotA_bias, _lotA_unbias,
+                          #           _lotB_bias, _lotB_unbias
+```
+
+Accepted values: `lot`, `bias`, or any subset of `[lot, bias]`. The
+actual lot / bias names come from the dose map (`lots:` and
+`bias_groups:`). If the dose map declares no groups for a dimension,
+that dimension is skipped with a warning.
+
+`split_by` and `variants:` both expand the plot block — they compose,
+so a plot with three variants and `split_by: lot` produces `3 × n_lots`
+PNGs.
 
 ## Reference (control) samples
 

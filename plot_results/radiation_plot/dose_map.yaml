@@ -2,7 +2,7 @@
 # Serial-number to radiation dose mapping
 # =============================================================================
 #
-# Format: two top-level keys.
+# Top-level keys:
 #
 # 1) `doses` (REQUIRED)
 #    Maps each serial number (SN01..SN37) to its absorbed dose in kRad.
@@ -14,12 +14,21 @@
 #    where they would not have a meaningful dose position.
 #    If not provided, the loader uses every SN with dose == 0.
 #
-# The loader also accepts the equivalent inverse form for convenience:
+# 3) `lots` (OPTIONAL)
+#    Maps lot name -> list of SNs. Used by `split_by: lot` and the
+#    `lot:` filter on individual plots. If omitted, lot filtering is
+#    disabled (every SN is treated as "unknown lot").
+#
+# 4) `bias_groups` (OPTIONAL)
+#    Maps bias condition ("bias" / "unbias") -> list of SNs. Used by
+#    `split_by: bias` and the `bias:` filter on individual plots. If
+#    omitted, bias filtering is disabled.
+#
+# The loader also accepts an inverse form of `doses` for convenience:
 #
 #     dose_groups:
 #       0:  [SN36, SN37]
 #       1:  [SN01, SN02, SN03, SN04, SN25, SN26]
-#       2:  [SN05, SN06, SN07, SN08, SN27, SN28]
 #       ...
 #
 # Either `doses` or `dose_groups` must be present. Do not specify both.
@@ -86,3 +95,56 @@ doses:
 reference_sns:
   - SN36
   - SN37
+
+# Production lot assignment.
+#   LOT B: SN01-SN24, SN36
+#   LOT A: SN25-SN35, SN37
+lots:
+  A: [SN25, SN26, SN27, SN28, SN29, SN30, SN31, SN32, SN33, SN34, SN35, SN37]
+  B: [SN01, SN02, SN03, SN04, SN05, SN06, SN07, SN08, SN09, SN10,
+      SN11, SN12, SN13, SN14, SN15, SN16, SN17, SN18, SN19, SN20,
+      SN21, SN22, SN23, SN24, SN36]
+
+# Bias condition during irradiation (per the test plan table).
+# References (SN36, SN37) were irradiated under bias; there is no "unbias"
+# reference sample, and there is no "unbias" sample at 40 kRad.
+bias_groups:
+  bias:
+    - SN01
+    - SN02
+    - SN03
+    - SN25
+    - SN05
+    - SN06
+    - SN07
+    - SN27
+    - SN09
+    - SN10
+    - SN11
+    - SN29
+    - SN13
+    - SN14
+    - SN15
+    - SN31
+    - SN17
+    - SN18
+    - SN19
+    - SN33
+    - SN21
+    - SN35
+    - SN23
+    - SN24
+    - SN36
+    - SN37
+  unbias:
+    - SN04
+    - SN26
+    - SN08
+    - SN28
+    - SN12
+    - SN30
+    - SN16
+    - SN32
+    - SN20
+    - SN34
+    - SN22
