@@ -1,0 +1,388 @@
+ignore_serial_numbers:
+  - SN99
+
+ignore_missing_rules:
+  # 1. Ignoruj cały stage dla konkretnego pliku / układu
+  - lcl_name: TPS25963
+    lcl_serial_number: SN15
+    irradiation_stage: ["after_irradiate", "annealing_24h_25c", "annealing_168h_25c", "annealing_168h_100c"]
+
+  # 2. Ignoruj cały logiczny pomiar w danym stage
+  - lcl_name: TPS2553
+    lcl_serial_number: SN21
+    irradiation_stage: after_irradiate
+    logical_measurement_name: ["ilim_accuracy", "enable_input_hysteresis", "time_on", "time_off", "short_circuit_response", "timing_time_on", "timing_time_off", "timing_short_circuit_response"]
+ 
+  - lcl_name: TPS2553
+    lcl_serial_number: ["SN04"]
+    irradiation_stage: ["after_irradiate"]
+    logical_measurement_name: ["timing_short_circuit_response"]
+
+  - lcl_name: TPS2553
+    lcl_serial_number: ["SN01"]
+    irradiation_stage: ["after_irradiate"]
+    logical_measurement_name: ["timing_overcurrent_trip_time"]
+
+  - lcl_name: TPS2553
+    lcl_serial_number: ["SN21"]
+    irradiation_stage: ["annealing_24h_25c", "annealing_168h_25c", "annealing_168h_100c"]
+    logical_measurement_name: ["timing_time_off", "timing_time_on", "enable_input_hysteresis", "time_on", "time_off"]
+
+  - lcl_name: TPS2553
+    lcl_serial_number: SN35
+    irradiation_stage: after_irradiate
+    logical_measurement_name: ["ilim_accuracy", "enable_input_hysteresis", "time_on", "time_off", "timing_time_on", "timing_time_off"]
+
+  - lcl_name: TPS2553
+    lcl_serial_number: ["SN35"]
+    irradiation_stage: ["annealing_24h_25c"]
+    logical_measurement_name: ["timing_time_off", "timing_time_on", "enable_input_hysteresis", "time_on", "time_off", "overcurrent_trip_time","timing_overcurrent_trip_time", "timing_short_circuit_response", "short_circuit_response"]
+
+  - lcl_name: TPS2553
+    lcl_serial_number: ["SN35"]
+    irradiation_stage: ["annealing_168h_25c"]
+    logical_measurement_name: ["timing_time_off", "timing_time_on", "enable_input_hysteresis", "time_on", "time_off"]
+    
+  - lcl_name: TPS2553
+    lcl_serial_number: ["SN35"]
+    irradiation_stage: ["annealing_168h_100c"]
+    logical_measurement_name: ["timing_time_off", "timing_time_on", "enable_input_hysteresis", "time_on", "time_off"]
+
+  - lcl_name: TPS2553
+    lcl_serial_number: ["SN23", "SN24"]
+    irradiation_stage: ["after_irradiate", "annealing_24h_25c", "annealing_168h_25c", "annealing_168h_100c"]
+    logical_measurement_name: ["rdson", "ilim_accuracy", "enable_input_hysteresis", "time_on", "time_off", "short_circuit_response","overcurrent_trip_time", "timing_time_on", "timing_time_off", "timing_overcurrent_trip_time", "timing_short_circuit_response"]
+
+  - lcl_name: TPS259474
+    lcl_serial_number: ["SN31"]
+    irradiation_stage: ["after_irradiate"]
+    logical_measurement_name: ["timing_short_circuit_response"]
+
+  - lcl_name: TPS259474
+    lcl_serial_number: ["SN23", "SN24"]
+    irradiation_stage: ["after_irradiate"]
+    logical_measurement_name: ["rdson","iquiescent","ilim_accuracy","fault_and_latch","enable_input_hysteresis","overcurrent_trip_time","short_circuit_response","time_on","time_off","timing_time_off", "timing_time_on","timing_overcurrent_trip_time","timing_short_circuit_response"]
+
+  - lcl_name: TPS25963
+    lcl_serial_number: ["SN21"]
+    irradiation_stage: ["after_irradiate"]
+    logical_measurement_name: ["ilim_accuracy","enable_input_hysteresis","overcurrent_trip_time","short_circuit_response","time_on","time_off","timing_time_off", "timing_time_on","timing_overcurrent_trip_time","timing_short_circuit_response"]
+
+  - lcl_name: TPS25963
+    lcl_serial_number: ["SN35"]
+    irradiation_stage: ["after_irradiate"]
+    logical_measurement_name: ["iquiescent","fault_and_latch","ilim_accuracy","enable_input_hysteresis","overcurrent_trip_time","short_circuit_response","time_on","time_off","timing_time_off", "timing_time_on","timing_overcurrent_trip_time","timing_short_circuit_response"]
+
+  - lcl_name: TPS25963
+    lcl_serial_number: ["SN23", "SN24"]
+    irradiation_stage: ["after_irradiate"]
+    logical_measurement_name: ["rdson","iquiescent","ilim_accuracy","fault_and_latch","enable_input_hysteresis","overcurrent_trip_time","short_circuit_response","time_on","time_off","timing_time_off", "timing_time_on","timing_overcurrent_trip_time","timing_short_circuit_response"]
+  
+  - lcl_name: TPS25963
+    lcl_serial_number: ["SN23", "SN24"]
+    irradiation_stage: ["annealing_24h_25c"]
+    logical_measurement_name: ["rdson","ilim_accuracy","fault_and_latch","enable_input_hysteresis","overcurrent_trip_time","short_circuit_response","time_on","time_off","timing_time_off", "timing_time_on","timing_overcurrent_trip_time","timing_short_circuit_response"]
+
+  - lcl_name: TPS25963
+    lcl_serial_number: ["SN23"]
+    irradiation_stage: ["annealing_168h_25c"]
+    logical_measurement_name: ["enable_input_hysteresis", "time_on", "time_off", "timing_time_on", "timing_time_off"]
+
+  - lcl_name: TPS25963
+    lcl_serial_number: ["SN24"]
+    irradiation_stage: ["annealing_168h_25c"]
+    logical_measurement_name: ["rdson","ilim_accuracy","fault_and_latch","enable_input_hysteresis","overcurrent_trip_time","short_circuit_response","time_on","time_off","timing_time_off", "timing_time_on","timing_overcurrent_trip_time","timing_short_circuit_response"]
+  - lcl_name: TPS25963
+    lcl_serial_number: ["SN35"]
+    irradiation_stage: ["annealing_24h_25c"]
+    logical_measurement_name: ["timing_time_off", "time_off"]
+
+    #Missing measurments - usualy delated because was wrong
+  - lcl_name: TPS259474
+    lcl_serial_number: ["SN02"]
+    irradiation_stage: ["after_irradiate"]
+    logical_measurement_name: ["timing_overcurrent_trip_time"]
+
+  - lcl_name: TPS259474
+    lcl_serial_number: ["SN04", "SN08", "SN09", "SN10"]
+    irradiation_stage: ["before_irradiate"]
+    logical_measurement_name: ["overcurrent_trip_time"]
+    missing_metric: ["time_off_us"]
+
+  - lcl_name: TPS259474
+    lcl_serial_number: ["SN14", "SN16", "SN22", "SN25"]
+    irradiation_stage: ["after_irradiate"]
+    logical_measurement_name: ["overcurrent_trip_time"]
+    missing_metric: ["time_off_us"]
+
+  - lcl_name: TPS259474
+    lcl_serial_number: ["SN01", "SN02", "SN03", "SN05", "SN07", "SN10", "SN11", "SN13", "SN14", "SN17", "SN18", "SN21", "SN23", "SN27", "SN35"]
+    irradiation_stage: ["annealing_24h_25c"]
+    logical_measurement_name: ["overcurrent_trip_time"]
+    missing_metric: ["time_off_us"]
+
+  - lcl_name: TPS259474
+    lcl_serial_number: ["SN33", "SN34", "SN02", "SN11", "SN13", "SN17", "SN19", "SN21", "SN24", "SN25", "SN29", "SN32"]
+    irradiation_stage: ["annealing_168h_25c"]
+    logical_measurement_name: ["overcurrent_trip_time"]
+    missing_metric: ["time_off_us"]
+
+  - lcl_name: TPS259474
+    lcl_serial_number: ["SN35", "SN07", "SN08", "SN10", "SN16", "SN23", "SN28", "SN30"]
+    irradiation_stage: ["annealing_168h_100c"]
+    logical_measurement_name: ["overcurrent_trip_time"]
+    missing_metric: ["time_off_us"]
+
+  # # 3. Ignoruj konkretną metrykę w pomiarze
+  # - lcl_name: TPS2553
+  #   lcl_serial_number: SN10
+  #   irradiation_stage: after_irradiate
+  #   logical_measurement_name: ilim_accuracy
+  #   missing_metric: lower_no_trip_a, upper_trip_a
+
+  # # 4. Ignoruj konkretną metrykę tylko dla konkretnego contextu
+  # - lcl_name: TPS2553
+  #   lcl_serial_number: SN10
+  #   irradiation_stage: after_irradiate
+  #   logical_measurement_name: ilim_accuracy
+  #   missing_metric: lower_no_trip_a
+  #   context_key: target_ilim_a=0.12, target_ilim_a=0.5
+
+expected_stages:
+  - before_irradiate
+  - after_irradiate
+  - annealing_24h_25c
+  - annealing_168h_25c
+  - annealing_168h_100c
+
+devices:
+  TPS2553:
+    measurements:
+      enable_input_hysteresis:
+        metrics:
+          - measured_falling_v
+          - measured_rising_v
+      fault_and_latch:
+        metrics:
+          - fault_test
+          - latch_test
+      ilim_accuracy:
+        contexts:
+          - target_ilim_a=0.12
+          - target_ilim_a=0.5
+          - target_ilim_a=1.0
+          - target_ilim_a=1.7
+        metrics:
+          - iterations
+          - lower_no_trip_a
+          - upper_trip_a
+      iquiescent:
+        metrics:
+          - iq_ua
+      ishutdown:
+        metrics:
+          - ish_ua
+      overcurrent_trip_time:
+        metrics:
+          - fall_time_off_us
+          - slew_rate_off_v_per_us
+          - time_off_us
+      rdson:
+        contexts:
+          - iload_a=0.1
+          - iload_a=0.5
+          - iload_a=1.0
+        metrics:
+          - vds_v
+          - rdson_mohm
+      short_circuit_response:
+        metrics:
+          - fall_time_off_us
+          - slew_rate_off_v_per_us
+          - time_off_us
+      time_on:
+        source_measurement_type: time_on_off
+        metrics:
+          - rise_time_on_ms
+          - slew_rate_on_v_per_us
+          - time_on_ms
+      time_off:
+        source_measurement_type: time_on_off
+        metrics:
+          - fall_time_off_ms
+          - slew_rate_off_v_per_us
+          - time_off_ms
+      timing_time_on:
+        metrics:
+          - time_to_10pct
+          - time_to_90pct
+          - vout_slew_rate
+      timing_time_off:
+        metrics:
+          - time_to_10pct
+          - time_to_90pct
+          - vout_slew_rate
+      timing_overcurrent_trip_time:
+        metrics:
+          - overcurrent_to_10pct
+          - overcurrent_to_95pct
+          - vout_slew_rate
+      timing_short_circuit_response:
+        metrics:
+          - short_circuit_response
+          - vout_slew_rate
+
+  TPS259474:
+    measurements:
+      enable_input_hysteresis:
+        metrics:
+          - measured_falling_v
+          - measured_rising_v
+      fault_and_latch:
+        metrics:
+          - fault_test
+          - latch_test
+      ilim_accuracy:
+        contexts:
+          - target_ilim_a=0.5
+          - target_ilim_a=1.0
+          - target_ilim_a=4.0
+          - target_ilim_a=5.5
+        metrics:
+          - iterations
+          - lower_no_trip_a
+          - upper_trip_a
+      iquiescent:
+        metrics:
+          - iq_ua
+      ishutdown:
+        metrics:
+          - ish_ua
+      overcurrent_trip_time:
+        metrics:
+          - fall_time_off_us
+          - slew_rate_off_v_per_us
+          - time_off_us
+      rdson:
+        contexts:
+          - iload_a=0.1
+          - iload_a=0.5
+          - iload_a=1.0
+          - iload_a=2.0
+          - iload_a=3.0
+        metrics:
+          - vds_v
+          - rdson_mohm
+      short_circuit_response:
+        metrics:
+          - fall_time_off_us
+          - slew_rate_off_v_per_us
+          - time_off_us
+      time_on:
+        source_measurement_type: time_on_off
+        metrics:
+          - rise_time_on_ms
+          - slew_rate_on_v_per_us
+          - time_on_ms
+      time_off:
+        source_measurement_type: time_on_off
+        metrics:
+          - fall_time_off_ms
+          - slew_rate_off_v_per_us
+          - time_off_ms
+      timing_time_on:
+        metrics:
+          - time_to_10pct
+          - time_to_90pct
+          - vout_slew_rate
+      timing_time_off:
+        metrics:
+          - time_to_30pct
+          - time_to_90pct
+          - vout_slew_rate
+      timing_overcurrent_trip_time:
+        metrics:
+          - overcurrent_to_10pct
+          - overcurrent_to_97pct
+          - vout_slew_rate
+      timing_short_circuit_response:
+        metrics:
+          - short_circuit_response
+          - vout_slew_rate
+
+  TPS25963:
+    measurements:
+      enable_input_hysteresis:
+        metrics:
+          - measured_falling_v
+          - measured_rising_v
+      fault_and_latch:
+        metrics:
+          - fault_test
+          - latch_test
+      ilim_accuracy:
+        contexts:
+          - target_ilim_a=0.125
+          - target_ilim_a=0.5
+          - target_ilim_a=1.0
+          - target_ilim_a=2.0
+        metrics:
+          - iterations
+          - lower_no_trip_a
+          - upper_trip_a
+      iquiescent:
+        metrics:
+          - iq_ua
+      ishutdown:
+        metrics:
+          - ish_ua
+      overcurrent_trip_time:
+        metrics:
+          - fall_time_off_us
+          - slew_rate_off_v_per_us
+          - time_off_us
+      rdson:
+        contexts:
+          - iload_a=0.1
+          - iload_a=0.2
+          - iload_a=0.5
+          - iload_a=1.0
+        metrics:
+          - vds_v
+          - rdson_mohm
+      short_circuit_response:
+        metrics:
+          - fall_time_off_us
+          - slew_rate_off_v_per_us
+          - time_off_us
+      time_on:
+        source_measurement_type: time_on_off
+        metrics:
+          - rise_time_on_ms
+          - slew_rate_on_v_per_us
+          - time_on_ms
+      time_off:
+        source_measurement_type: time_on_off
+        metrics:
+          - fall_time_off_ms
+          - slew_rate_off_v_per_us
+          - time_off_ms
+      timing_time_on:
+        metrics:
+          - time_to_10pct
+          - time_to_90pct
+          - vout_slew_rate
+      timing_time_off:
+        metrics:
+          - time_to_30pct
+          - time_to_90pct
+          - vout_slew_rate
+      timing_overcurrent_trip_time:
+        metrics:
+          - overcurrent_to_10pct
+          - overcurrent_to_96pct
+          - vout_slew_rate
+      timing_short_circuit_response:
+        metrics:
+          - short_circuit_response
+          - vout_slew_rate

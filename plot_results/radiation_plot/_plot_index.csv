@@ -1,0 +1,4 @@
+﻿output_name,type,lcl_name,measurement_type,metric,context_key,output_path,n_points,n_series,skipped,reason
+rich_TPS2553_iq_absolute,absolute,TPS2553,iquiescent,iq_ua,,/home/claude/test_run/rich_plots/rich_TPS2553_iq_absolute.png,34,2,False,
+rich_TPS2553_iq_delta_pct,delta,TPS2553,iquiescent,iq_ua,,/home/claude/test_run/rich_plots/rich_TPS2553_iq_delta_pct.png,17,1,False,
+rich_TPS2553_iq_annealing,annealing,TPS2553,iquiescent,iq_ua,,/home/claude/test_run/rich_plots/rich_TPS2553_iq_annealing.png,85,5,False,

@@ -1,0 +1,217 @@
+# =============================================================================
+# Plot configuration for radiation test results
+# =============================================================================
+#
+# Top-level sections:
+#   - data:      input/output paths
+#   - defaults:  default styling/behaviour for every plot (overridable)
+#   - plots:     ordered list of plots to generate
+#
+# Inheritance: every plot inherits `defaults`. Any field set on a plot
+# overrides the default. Each plot may also declare `variants:` to emit
+# multiple PNG files from a single entry (e.g. one with raw points,
+# one with statistics lines).
+#
+# Selectors per plot:
+#   lcl_name           : device family (TPS2553 / TPS259474 / TPS25963)
+#   measurement_type   : e.g. "iquiescent", "rdson", "timing_time_on"
+#   metric             : e.g. "iq_ua", "rdson_mohm"
+#   context_key        : exact context-key string (e.g. "iload_a=1.0")
+#                        REQUIRED when the same metric exists in several
+#                        context variants (rdson, ilim_accuracy, ...).
+#   stages             : list of irradiation_stage values to include
+#                        (typ. ["before_irradiate", "after_irradiate"])
+#   include_doses      : keep only these doses (kRad), drop the rest
+#   exclude_doses      : drop these doses
+#   exclude_sn         : drop these specific serial numbers
+#
+# Axis limits, titles, labels are optional - if omitted matplotlib auto.
+# =============================================================================
+
+data:
+  flat_files_dir: "D:/Studia/Inżynierka/Software/PomiaryTID/TID_result_analysis/result_analysis/flat_files"
+  dose_map: "./dose_map.yaml"
+  output_dir: "./plots"
+
+defaults:
+  figsize: [10, 6]
+  dpi: 150
+  format: png
+  show_points: true
+  show_lines:
+    - min
+    - max
+    - mean
+  marker_size: 40
+  alpha_points: 0.65
+  line_width: 1.6
+  grid: true
+  legend: true
+  x_label: "Dose [kRad]"
+  exclude_sn: []
+  # Stage display names (used in legends / annealing X-axis ticks)
+  stage_labels:
+    before_irradiate: "Before"
+    after_irradiate: "After"
+    annealing_24h_25c: "24h @ 25 C"
+    annealing_168h_25c: "168h @ 25 C"
+    annealing_168h_100c: "168h @ 100 C"
+  # Stage color/marker mapping (used by absolute plots)
+  stage_styles:
+    before_irradiate:    { color: "#1f77b4", marker: "o" }
+    after_irradiate:     { color: "#d62728", marker: "^" }
+    annealing_24h_25c:   { color: "#2ca02c", marker: "s" }
+    annealing_168h_25c:  { color: "#9467bd", marker: "D" }
+    annealing_168h_100c: { color: "#ff7f0e", marker: "v" }
+
+
+plots:
+
+  # =============================================================
+  # TPS2553 - Quiescent current
+  # =============================================================
+
+  - name: "TPS2553_iq_absolute_stats"
+    type: absolute
+    title: "TPS2553 - Quiescent current vs dose"
+    lcl_name: TPS2553
+    measurement_type: iquiescent
+    metric: iq_ua
+    stages: [before_irradiate, after_irradiate]
+    y_label: "I_Q [uA]"
+
+  - name: "TPS2553_iq_delta"
+    type: delta
+    title: "TPS2553 - Delta I_Q (after - before)"
+    lcl_name: TPS2553
+    measurement_type: iquiescent
+    metric: iq_ua
+    delta_from: before_irradiate
+    delta_to: after_irradiate
+    delta_mode: absolute        # "absolute" or "relative_percent"
+    y_label: "delta I_Q [uA]"
+
+  - name: "TPS2553_iq_delta_relative"
+    type: delta
+    title: "TPS2553 - Relative change in I_Q"
+    lcl_name: TPS2553
+    measurement_type: iquiescent
+    metric: iq_ua
+    delta_from: before_irradiate
+    delta_to: after_irradiate
+    delta_mode: relative_percent
+    y_label: "delta I_Q [%]"
+
+  # Same data, two views via variants (one stats-only PNG, one points-only PNG)
+  - name: "TPS2553_iq_views"
+    type: absolute
+    title: "TPS2553 - Quiescent current"
+    lcl_name: TPS2553
+    measurement_type: iquiescent
+    metric: iq_ua
+    stages: [before_irradiate, after_irradiate]
+    y_label: "I_Q [uA]"
+    variants:
+      - suffix: "_stats_only"
+        show_points: false
+        show_lines: [min, max, mean]
+      - suffix: "_points_only"
+        show_points: true
+        show_lines: []
+
+  # =============================================================
+  # TPS2553 - R_DS(ON) - context_key required (three load currents)
+  # =============================================================
+
+  - name: "TPS2553_rdson_iload_1A"
+    type: absolute
+    title: "TPS2553 - R_DS(ON) at I_load = 1.0 A"
+    lcl_name: TPS2553
+    measurement_type: rdson
+    metric: rdson_mohm
+    context_key: "iload_a=1.0"
+    stages: [before_irradiate, after_irradiate]
+    y_label: "R_DS(ON) [mOhm]"
+
+  - name: "TPS2553_rdson_iload_0p5A_delta"
+    type: delta
+    title: "TPS2553 - Delta R_DS(ON) at I_load = 0.5 A"
+    lcl_name: TPS2553
+    measurement_type: rdson
+    metric: rdson_mohm
+    context_key: "iload_a=0.5"
+    delta_from: before_irradiate
+    delta_to: after_irradiate
+    delta_mode: absolute
+    y_label: "delta R_DS(ON) [mOhm]"
+
+  # =============================================================
+  # TPS259474 - timing measurements (from oscilloscope)
+  # =============================================================
+
+  - name: "TPS259474_time_on_10pct"
+    type: absolute
+    title: "TPS259474 - Turn-on time to 10% V_OUT"
+    lcl_name: TPS259474
+    measurement_type: timing_time_on
+    metric: time_to_10pct
+    stages: [before_irradiate, after_irradiate]
+    y_label: "Time [ms]"
+
+  - name: "TPS259474_time_on_slew_rate"
+    type: absolute
+    title: "TPS259474 - V_OUT slew rate on turn-on"
+    lcl_name: TPS259474
+    measurement_type: timing_time_on
+    metric: vout_slew_rate
+    stages: [before_irradiate, after_irradiate]
+    y_label: "Slew rate [V/ms]"
+
+  # =============================================================
+  # TPS25963 - Annealing recovery plots
+  # =============================================================
+
+  - name: "TPS25963_iq_annealing"
+    type: annealing
+    title: "TPS25963 - I_Q recovery during annealing"
+    lcl_name: TPS25963
+    measurement_type: iquiescent
+    metric: iq_ua
+    stages_order:
+      - before_irradiate
+      - after_irradiate
+      - annealing_24h_25c
+      - annealing_168h_25c
+      - annealing_168h_100c
+    y_label: "I_Q [uA]"
+
+  # Same annealing plot but limited to high-dose samples only
+  - name: "TPS25963_iq_annealing_high_dose"
+    type: annealing
+    title: "TPS25963 - I_Q annealing - 15 / 25 kRad only"
+    lcl_name: TPS25963
+    measurement_type: iquiescent
+    metric: iq_ua
+    stages_order:
+      - before_irradiate
+      - after_irradiate
+      - annealing_24h_25c
+      - annealing_168h_25c
+      - annealing_168h_100c
+    include_doses: [15, 25]
+    y_label: "I_Q [uA]"
+
+  - name: "TPS25963_rdson_annealing"
+    type: annealing
+    title: "TPS25963 - R_DS(ON) recovery at I_load = 1.0 A"
+    lcl_name: TPS25963
+    measurement_type: rdson
+    metric: rdson_mohm
+    context_key: "iload_a=1.0"
+    stages_order:
+      - before_irradiate
+      - after_irradiate
+      - annealing_24h_25c
+      - annealing_168h_25c
+      - annealing_168h_100c
+    y_label: "R_DS(ON) [mOhm]"

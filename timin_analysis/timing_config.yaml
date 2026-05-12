@@ -1,0 +1,532 @@
+defaults:
+  time_scale: us
+
+devices:
+  TPS2553:
+    tests:
+      time_on:
+        time_scale: ms
+        plot: single
+        waveforms:
+          "00": Enable
+          "01": Vout
+        axes:
+          x: [-1.0, 9.0]    
+          y: [-0.5, 7.0]
+        slew_rate:
+          enabled: true
+          waveform: "01"
+          edge: rising
+          start_threshold: 0.10
+          stop_threshold: 0.70
+          color: black
+          result_name: vout_slew_rate
+        markers:
+          - id: start
+            label: Start
+            waveform: "00"
+            edge: rising
+            threshold: 0.5
+            color: red
+          - id: stop_10
+            label: Stop 10%
+            result_name: time_to_10pct
+            waveform: "01"
+            edge: rising
+            threshold: 0.10
+            color: green
+          - id: stop_90
+            label: Stop 90%
+            result_name: time_to_90pct
+            waveform: "01"
+            edge: rising
+            threshold: 0.90
+            color: purple
+      time_off:
+        time_scale: ms
+        plot: single
+        waveforms:
+          "00": Enable
+          "01": Vout
+        axes:
+          x: [-1, 9]    
+          y: [-0.5, 7]
+        slew_rate:
+          enabled: true
+          waveform: "01"
+          edge: falling
+          start_threshold: 0.90
+          stop_threshold: 0.60
+          color: black
+          result_name: vout_slew_rate
+        markers:
+          - id: start
+            label: Start
+            waveform: "00"
+            edge: falling
+            threshold: 0.5
+            color: red
+          - id: stop_90
+            label: Stop 90%
+            result_name: time_to_90pct
+            waveform: "01"
+            edge: falling
+            threshold: 0.90
+            color: green
+          - id: stop_10
+            label: Stop 10%
+            result_name: time_to_10pct
+            waveform: "01"
+            edge: falling
+            threshold: 0.10
+            color: purple
+      overcurrent_trip_time:
+        time_scale: us
+        plot: dual
+        waveforms:
+          "00": Vout
+          "01": Iload
+        axes:
+          x: [-200, 800]
+          top:
+            y: [-0.5, 7.0]
+          bottom:
+            y: [0.03, 0.20]
+        signal_preprocess:
+          "01":
+            offset_correction:
+              window_start: -200e-6
+              window_end: -50e-6
+              target_mean: 0.07
+        slew_rate:
+          enabled: true
+          waveform: "00"
+          edge: falling
+          start_threshold: 0.90
+          stop_threshold: 0.10
+          color: black
+          result_name: vout_slew_rate
+        markers:
+          - id: start
+            label: Current threshold
+            waveform: "01"
+            edge: rising
+            threshold_voltage: 0.10
+            color: red
+          - id: stop_10
+            label: VOUT 10%
+            result_name: overcurrent_to_10pct
+            waveform: "00"
+            edge: falling
+            threshold: 0.10
+            color: orange
+          - id: stop_95
+            label: VOUT 95%
+            result_name: overcurrent_to_95pct
+            waveform: "00"
+            edge: falling
+            threshold: 0.95
+            color: purple
+            crossing: last
+      short_circuit_response:
+        time_scale: us
+        plot: dual
+        waveforms:
+          "00": Vout
+          "01": Iload
+        axes:
+          x: [-13, 53]
+          top:
+            y: [-1.0, 7.0]
+          bottom:
+            y: [-0.7, 1.7]
+        signal_preprocess:
+          "01":
+            offset_correction:
+              window_start: -13e-6
+              window_end: -7e-6
+              target_mean: 0.00
+        slew_rate:
+          enabled: true
+          waveform: "00"
+          edge: falling
+          start_threshold: 0.90
+          stop_threshold: 0.10
+          color: black
+          result_name: vout_slew_rate
+        markers:
+          - id: start
+            label: Current threshold
+            waveform: "01"
+            edge: rising
+            threshold_voltage: 0.20
+            color: red
+          - id: stop
+            label: VOUT 10%
+            result_name: short_circuit_response
+            waveform: "00"
+            edge: falling
+            threshold: 0.10
+            color: orange
+
+  TPS259474:
+    tests:
+      time_on:
+        time_scale: us
+        plot: single
+        waveforms:
+          "00": Enable
+          "01": Vout
+        axes:
+          x: [-160.0, 1500.0]    
+          y: [-0.5, 23.5]
+        slew_rate:
+          enabled: true
+          waveform: "01"
+          edge: rising
+          start_threshold: 0.10
+          stop_threshold: 0.70
+          color: black
+          result_name: vout_slew_rate
+        markers:
+          - id: start
+            label: Start
+            waveform: "00"
+            edge: rising
+            threshold: 0.5
+            color: red
+          - id: stop_10
+            label: Stop 10%
+            result_name: time_to_10pct
+            waveform: "01"
+            edge: rising
+            threshold: 0.10
+            color: green
+          - id: stop_90
+            label: Stop 90%
+            result_name: time_to_90pct
+            waveform: "01"
+            edge: rising
+            threshold: 0.90
+            color: purple
+      time_off:
+        time_scale: us
+        time_scale: us
+        plot: single
+        waveforms:
+          "00": Enable
+          "01": Vout
+        axes:
+          x: [-160.0, 1500.0]    
+          y: [-0.5, 23.5]
+        slew_rate:
+          enabled: true
+          waveform: "01"
+          edge: falling
+          start_threshold: 0.90
+          stop_threshold: 0.60
+          color: black
+          result_name: vout_slew_rate
+        markers:
+          - id: start
+            label: Start
+            waveform: "00"
+            edge: falling
+            threshold: 0.5
+            color: red
+          - id: stop_90
+            label: Stop 90%
+            result_name: time_to_90pct
+            waveform: "01"
+            edge: falling
+            threshold: 0.90
+            color: green
+          - id: stop_10
+            label: Stop 30%
+            result_name: time_to_30pct
+            waveform: "01"
+            edge: falling
+            threshold: 0.30
+            color: purple
+      overcurrent_trip_time:
+        time_scale: us
+        plot: dual
+        waveforms:
+          "00": Vout
+          "01": Iload
+        axes:
+          x: [-60, 240]
+          top:
+            y: [-0.5, 23.5]
+          bottom:
+            y: [-0.06, 0.20]
+        signal_preprocess:
+          "01":
+            offset_correction:
+              window_start: -60e-6
+              window_end: -20e-6
+              target_mean: 0.07
+        slew_rate:
+          enabled: true
+          waveform: "00"
+          edge: falling
+          start_threshold: 0.90
+          stop_threshold: 0.40
+          color: black
+          result_name: vout_slew_rate
+        markers:
+          - id: start
+            label: Current threshold
+            waveform: "01"
+            edge: rising
+            threshold_voltage: 0.10
+            color: red
+          - id: stop_10
+            label: VOUT 10%
+            result_name: overcurrent_to_10pct
+            waveform: "00"
+            edge: falling
+            threshold: 0.10
+            color: orange
+          - id: stop_95
+            label: VOUT 97%
+            result_name: overcurrent_to_97pct
+            waveform: "00"
+            edge: falling
+            threshold: 0.97
+            color: purple
+            crossing: last
+      short_circuit_response:
+        time_scale: us
+        plot: dual
+        waveforms:
+          "00": Vout
+          "01": Iload
+        axes:
+          x: [-20, 80]
+          top:
+            y: [-0.5, 23.5]
+          bottom:
+            y: [-0.7, 1.7]
+        signal_preprocess:
+          "01":
+            offset_correction:
+              window_start: -20e-6
+              window_end: -10e-6
+              target_mean: 0.00
+        slew_rate:
+          enabled: true
+          waveform: "00"
+          edge: falling
+          start_threshold: 0.90
+          stop_threshold: 0.20
+          color: black
+          result_name: vout_slew_rate
+        markers:
+          - id: start
+            label: Current threshold
+            waveform: "01"
+            edge: rising
+            threshold_voltage: 0.30
+            color: red
+          - id: stop
+            label: VOUT 10%
+            result_name: short_circuit_response
+            waveform: "00"
+            edge: falling
+            threshold: 0.10
+            color: orange
+
+  TPS25963:
+    tests:
+      time_on:
+        time_scale: us
+        plot: single
+        waveforms:
+          "00": Enable
+          "01": Vout
+        axes:
+          x: [-100.0, 900.0]    
+          y: [-0.5, 19.5]
+        slew_rate:
+          enabled: true
+          waveform: "01"
+          edge: rising
+          start_threshold: 0.10
+          stop_threshold: 0.70
+          color: black
+          result_name: vout_slew_rate
+        markers:
+          - id: start
+            label: Start
+            waveform: "00"
+            edge: rising
+            threshold: 0.5
+            color: red
+          - id: stop_10
+            label: Stop 10%
+            result_name: time_to_10pct
+            waveform: "01"
+            edge: rising
+            threshold: 0.10
+            color: green
+          - id: stop_90
+            label: Stop 90%
+            result_name: time_to_90pct
+            waveform: "01"
+            edge: rising
+            threshold: 0.90
+            color: purple
+      time_off:
+        time_scale: us
+        plot: single
+        waveforms:
+          "00": Enable
+          "01": Vout
+        axes:
+          x: [-160.0, 1500.0]    
+          y: [-0.5, 19.5]
+        slew_rate:
+          enabled: true
+          waveform: "01"
+          edge: falling
+          start_threshold: 0.90
+          stop_threshold: 0.60
+          color: black
+          result_name: vout_slew_rate
+        markers:
+          - id: start
+            label: Start
+            waveform: "00"
+            edge: falling
+            threshold: 0.5
+            color: red
+          - id: stop_90
+            label: Stop 90%
+            result_name: time_to_90pct
+            waveform: "01"
+            edge: falling
+            threshold: 0.90
+            color: green
+          - id: stop_10
+            label: Stop 30%
+            result_name: time_to_30pct
+            waveform: "01"
+            edge: falling
+            threshold: 0.30
+            color: purple
+      overcurrent_trip_time:
+        time_scale: us  
+        plot: dual
+        waveforms:
+          "00": Vout
+          "01": Iload
+        axes:
+          x: [-160, 640]
+          top:
+            y: [-0.5, 19.5]
+          bottom:
+            y: [-0.05, 0.20]
+        signal_preprocess:
+          "01":
+            offset_correction:
+              window_start: -150e-6
+              window_end: -50e-6
+              target_mean: 0.07
+        slew_rate:
+          enabled: true
+          waveform: "00"
+          edge: falling
+          start_threshold: 0.90
+          stop_threshold: 0.40
+          color: black
+          result_name: vout_slew_rate
+        markers:
+          - id: start
+            label: Current threshold
+            waveform: "01"
+            edge: rising
+            threshold_voltage: 0.10
+            color: red
+          - id: stop_10
+            label: VOUT 10%
+            result_name: overcurrent_to_10pct
+            waveform: "00"
+            edge: falling
+            threshold: 0.10
+            color: orange
+          - id: stop_95
+            label: VOUT 96%
+            result_name: overcurrent_to_96pct
+            waveform: "00"
+            edge: falling
+            threshold: 0.96
+            color: purple
+            crossing: last
+      short_circuit_response:
+        time_scale: us
+        plot: dual
+        waveforms:
+          "00": Vout
+          "01": Iload
+        axes:
+          x: [-20, 80]
+          top:
+            y: [-1, 19.5]
+          bottom:
+            y: [-0.7, 1.70]
+        signal_preprocess:
+          "01":
+            offset_correction:
+              window_start: -20e-6
+              window_end: -10e-6
+              target_mean: 0.00
+        slew_rate:
+          enabled: true
+          waveform: "00"
+          edge: falling
+          start_threshold: 0.90
+          stop_threshold: 0.25
+          color: black
+          result_name: vout_slew_rate
+        markers:
+          - id: start
+            label: Current threshold
+            waveform: "01"
+            edge: rising
+            threshold_voltage: 0.15
+            color: red
+          - id: stop
+            label: VOUT 10%
+            result_name: short_circuit_response
+            waveform: "00"
+            edge: falling
+            threshold: 0.10
+            color: orange
+
+  
+
+tests:
+  time_on:
+    waveforms:
+      "00": ENABLE
+      "01": VOUT
+    plot: single
+
+  time_off:
+    waveforms:
+      "00": ENABLE
+      "01": VOUT
+    plot: single
+
+  overcurrent_trip_time:
+    waveforms:
+      "00": VOUT
+      "01": ILOAD
+    plot: dual
+
+  short_circuit_response:
+    waveforms:
+      "00": VOUT
+      "01": ILOAD
+    plot: dual

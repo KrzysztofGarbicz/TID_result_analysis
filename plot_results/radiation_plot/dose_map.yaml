@@ -1,0 +1,88 @@
+# =============================================================================
+# Serial-number to radiation dose mapping
+# =============================================================================
+#
+# Format: two top-level keys.
+#
+# 1) `doses` (REQUIRED)
+#    Maps each serial number (SN01..SN37) to its absorbed dose in kRad.
+#    Use plain numbers (no units). 0 means a non-irradiated reference sample.
+#
+# 2) `reference_sns` (OPTIONAL)
+#    Explicit list of control samples that should be shown on a separate
+#    subplot in annealing plots and excluded from absolute/delta plots
+#    where they would not have a meaningful dose position.
+#    If not provided, the loader uses every SN with dose == 0.
+#
+# The loader also accepts the equivalent inverse form for convenience:
+#
+#     dose_groups:
+#       0:  [SN36, SN37]
+#       1:  [SN01, SN02, SN03, SN04, SN25, SN26]
+#       2:  [SN05, SN06, SN07, SN08, SN27, SN28]
+#       ...
+#
+# Either `doses` or `dose_groups` must be present. Do not specify both.
+# =============================================================================
+
+doses:
+  # --- Reference / control samples (no irradiation) ---
+  SN36: 0
+  SN37: 0
+
+  # --- 1 kRad ---
+  SN01: 1
+  SN02: 1
+  SN03: 1
+  SN04: 1
+  SN25: 1
+  SN26: 1
+
+  # --- 2 kRad ---
+  SN05: 2
+  SN06: 2
+  SN07: 2
+  SN08: 2
+  SN27: 2
+  SN28: 2
+
+  # --- 5 kRad ---
+  SN09: 5
+  SN10: 5
+  SN11: 5
+  SN12: 5
+  SN29: 5
+  SN30: 5
+
+  # --- 10 kRad ---
+  SN13: 10
+  SN14: 10
+  SN15: 10
+  SN16: 10
+  SN31: 10
+  SN32: 10
+
+  # --- 15 kRad ---
+  SN17: 15
+  SN18: 15
+  SN19: 15
+  SN20: 15
+  SN33: 15
+  SN34: 15
+
+  # --- 25 kRad ---
+  SN21: 25
+  SN22: 25
+  SN35: 25
+
+  # --- 40 kRad ---
+  SN23: 40
+  SN24: 40
+
+# Explicit list of reference samples (overrides auto-detection from dose==0).
+# These samples will be:
+#   - excluded from `absolute` and `delta` plots
+#   - shown on a separate subplot in `annealing` plots
+reference_sns:
+  - SN36
+  - SN37
