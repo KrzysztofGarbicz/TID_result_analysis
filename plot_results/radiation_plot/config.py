@@ -38,6 +38,13 @@ SUPPORTED_PLOT_TYPES = {"absolute", "delta", "annealing"}
 # Statistic line names accepted in `show_lines`.
 SUPPORTED_STAT_LINES = {"min", "max", "mean", "median"}
 
+# Axis scales accepted on `x_scale` / `y_scale`.
+SUPPORTED_AXIS_SCALES = {"linear", "log", "symlog"}
+
+# Tokens accepted in `split_by`. The plot is expanded into one PNG per
+# combination of values for the listed dimensions.
+SUPPORTED_SPLIT_DIMS = {"lot", "bias"}
+
 # Required fields per plot type. Extra fields are allowed (and ignored
 # here - the plotter is responsible for picking them up).
 REQUIRED_FIELDS_BY_TYPE: dict[str, set[str]] = {
@@ -81,16 +88,22 @@ def _normalize_sn(value: Any) -> str:
         return text
 
 
-def load_dose_map(path: Path) -> tuple[dict[str, float], list[str]]:
+def load_dose_map(
+    path: Path,
+) -> tuple[dict[str, float], list[str], dict[str, str], dict[str, str]]:
     """Load the dose map.
 
     Returns
     -------
-    (doses, reference_sns)
+    (doses, reference_sns, lot_by_sn, bias_by_sn)
         ``doses`` maps ``SNxx`` to absorbed dose in kRad.
         ``reference_sns`` is the list of SNs that should be treated as
         controls (excluded from absolute/delta plots, plotted separately
         on annealing plots).
+        ``lot_by_sn`` maps ``SNxx`` to lot name (e.g. ``"A"`` / ``"B"``).
+        Missing SNs are simply absent from the mapping.
+        ``bias_by_sn`` maps ``SNxx`` to bias group (e.g. ``"bias"`` /
+        ``"unbias"``).
     """
     path = Path(path)
     if not path.is_file():
@@ -178,13 +191,72 @@ def load_dose_map(path: Path) -> tuple[dict[str, float], list[str]]:
             reference_sns.append(sn)
         reference_sns = sorted(set(reference_sns))
 
+    # Lots: optional mapping lot name -> [SN, ...]. Inverted to lot_by_sn
+    # so we can build a single column.
+    lot_by_sn: dict[str, str] = {}
+    lots_raw = raw.get("lots")
+    if lots_raw is not None:
+        if not isinstance(lots_raw, dict):
+            raise ConfigError("`lots` must be a mapping of lot_name -> [SN, ...]")
+        for lot_name, sn_list in lots_raw.items():
+            lot_str = str(lot_name).strip()
+            if not lot_str:
+                raise ConfigError("Lot name in `lots` must be non-empty")
+            if not isinstance(sn_list, list):
+                raise ConfigError(
+                    f"Lot '{lot_str}': value must be a list, got "
+                    f"{type(sn_list).__name__}"
+                )
+            for sn_raw in sn_list:
+                sn = _normalize_sn(sn_raw)
+                if not sn:
+                    raise ConfigError(f"Invalid SN in lots[{lot_str}]: {sn_raw!r}")
+                if sn in lot_by_sn and lot_by_sn[sn] != lot_str:
+                    raise ConfigError(
+                        f"{sn} is assigned to two different lots "
+                        f"('{lot_by_sn[sn]}' and '{lot_str}')"
+                    )
+                lot_by_sn[sn] = lot_str
+
+    # Bias groups: optional mapping bias_name -> [SN, ...].
+    bias_by_sn: dict[str, str] = {}
+    bias_raw = raw.get("bias_groups")
+    if bias_raw is not None:
+        if not isinstance(bias_raw, dict):
+            raise ConfigError(
+                "`bias_groups` must be a mapping of bias_name -> [SN, ...]"
+            )
+        for bias_name, sn_list in bias_raw.items():
+            bias_str = str(bias_name).strip()
+            if not bias_str:
+                raise ConfigError("Bias group name must be non-empty")
+            if not isinstance(sn_list, list):
+                raise ConfigError(
+                    f"bias_groups['{bias_str}']: value must be a list"
+                )
+            for sn_raw in sn_list:
+                sn = _normalize_sn(sn_raw)
+                if not sn:
+                    raise ConfigError(
+                        f"Invalid SN in bias_groups[{bias_str}]: {sn_raw!r}"
+                    )
+                if sn in bias_by_sn and bias_by_sn[sn] != bias_str:
+                    raise ConfigError(
+                        f"{sn} is assigned to two different bias groups "
+                        f"('{bias_by_sn[sn]}' and '{bias_str}')"
+                    )
+                bias_by_sn[sn] = bias_str
+
     logger.info(
-        "Loaded dose map: %d serial numbers, %d reference samples (%s)",
+        "Loaded dose map: %d serial numbers, %d reference samples (%s); "
+        "lots: %s; bias groups: %s",
         len(doses),
         len(reference_sns),
         ", ".join(reference_sns) if reference_sns else "none",
+        sorted(set(lot_by_sn.values())) if lot_by_sn else "none",
+        sorted(set(bias_by_sn.values())) if bias_by_sn else "none",
     )
-    return doses, reference_sns
+    return doses, reference_sns, lot_by_sn, bias_by_sn
 
 
 # ---------------------------------------------------------------------------
@@ -271,13 +343,48 @@ def _validate_plot_entry(plot: dict[str, Any], index: int) -> None:
             f"Supported: {sorted(SUPPORTED_STAT_LINES)}"
         )
 
-    if ptype == "delta":
-        mode = plot.get("delta_mode", "absolute")
-        if mode not in {"absolute", "relative_percent"}:
+    # Delta plots are always rendered in percent; `delta_mode` is ignored
+    # if present (kept tolerated so old YAMLs still load).
+
+    for axis_key in ("x_scale", "y_scale"):
+        value = plot.get(axis_key)
+        if value is not None and value not in SUPPORTED_AXIS_SCALES:
             raise ConfigError(
-                f"{where} ({name}): `delta_mode` must be 'absolute' or "
-                f"'relative_percent', got {mode!r}"
+                f"{where} ({name}): `{axis_key}` must be one of "
+                f"{sorted(SUPPORTED_AXIS_SCALES)}, got {value!r}"
             )
+
+    lot = plot.get("lot")
+    if lot is not None and not isinstance(lot, (str, int)):
+        raise ConfigError(f"{where} ({name}): `lot` must be a scalar (string)")
+
+    bias = plot.get("bias")
+    if bias is not None and not isinstance(bias, str):
+        raise ConfigError(f"{where} ({name}): `bias` must be a string")
+
+    split_by = plot.get("split_by")
+    if split_by is not None:
+        if isinstance(split_by, str):
+            split_by_list = [split_by]
+        elif isinstance(split_by, list):
+            split_by_list = split_by
+        else:
+            raise ConfigError(
+                f"{where} ({name}): `split_by` must be a string or list of "
+                f"strings; got {type(split_by).__name__}"
+            )
+        bad = [t for t in split_by_list if t not in SUPPORTED_SPLIT_DIMS]
+        if bad:
+            raise ConfigError(
+                f"{where} ({name}): unknown split_by tokens {bad}. "
+                f"Supported: {sorted(SUPPORTED_SPLIT_DIMS)}"
+            )
+        # Normalise to list, preserve order, drop duplicates.
+        seen: list[str] = []
+        for t in split_by_list:
+            if t not in seen:
+                seen.append(t)
+        plot["split_by"] = seen
 
 
 def load_plot_config(path: Path) -> dict[str, Any]:
@@ -367,6 +474,78 @@ def load_plot_config(path: Path) -> dict[str, Any]:
         "defaults": defaults,
         "plots": resolved_plots,
     }
+
+
+def expand_splits(
+    plot_specs: list[dict[str, Any]],
+    *,
+    lot_values: list[str],
+    bias_values: list[str],
+) -> list[dict[str, Any]]:
+    """Expand specs declaring ``split_by`` into one spec per group.
+
+    For a spec with ``split_by: [lot]`` and lots ``[A, B]`` we emit two
+    specs with ``lot`` set to ``A`` and ``B`` and the matching suffix
+    appended to ``output_name``. Combinations of dimensions multiply,
+    so ``split_by: [lot, bias]`` yields ``len(lots) * len(biases)`` specs.
+
+    If the relevant dimension has no values (e.g. dose_map has no
+    ``lots:`` section), the spec is left untouched and a warning is
+    logged.
+    """
+    out: list[dict[str, Any]] = []
+    for spec in plot_specs:
+        split_by = spec.get("split_by") or []
+        if not split_by:
+            out.append(spec)
+            continue
+
+        # Build per-dimension value list.
+        dim_values: list[tuple[str, list[str]]] = []
+        for dim in split_by:
+            if dim == "lot":
+                values = lot_values
+            elif dim == "bias":
+                values = bias_values
+            else:  # validated earlier - defensive only
+                values = []
+            if not values:
+                logger.warning(
+                    "Plot '%s': split_by includes '%s' but the dose map "
+                    "declares no %s groups; skipping that dimension.",
+                    spec["output_name"],
+                    dim,
+                    dim,
+                )
+                continue
+            dim_values.append((dim, values))
+
+        if not dim_values:
+            out.append(spec)
+            continue
+
+        # Cartesian product across dimensions.
+        combos: list[list[tuple[str, str]]] = [[]]
+        for dim, values in dim_values:
+            combos = [c + [(dim, v)] for c in combos for v in values]
+
+        for combo in combos:
+            new_spec = copy.deepcopy(spec)
+            suffix_parts: list[str] = []
+            for dim, value in combo:
+                if dim == "lot":
+                    new_spec["lot"] = value
+                    suffix_parts.append(f"lot{value}")
+                elif dim == "bias":
+                    new_spec["bias"] = value
+                    suffix_parts.append(value)
+            suffix = "_" + "_".join(suffix_parts)
+            new_spec["output_name"] = f"{spec['output_name']}{suffix}"
+            # Drop split_by on the expanded specs - we've already split.
+            new_spec.pop("split_by", None)
+            out.append(new_spec)
+
+    return out
 
 
 def _check_unique_output_name(

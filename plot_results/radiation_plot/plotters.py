@@ -43,6 +43,27 @@ def _apply_axis_limits(ax: plt.Axes, plot_spec: dict[str, Any]) -> None:
         ax.set_ylim(y_lim[0], y_lim[1])
 
 
+def _apply_axis_scales(ax: plt.Axes, plot_spec: dict[str, Any]) -> None:
+    """Apply optional ``x_scale`` / ``y_scale`` (``"linear"`` / ``"log"``).
+
+    ``log`` on an axis that contains non-positive values would normally
+    raise; we mask with ``nonpositive="clip"`` so matplotlib silently
+    drops them rather than aborting the whole plot.
+    """
+    x_scale = plot_spec.get("x_scale")
+    y_scale = plot_spec.get("y_scale")
+    if x_scale:
+        if x_scale == "log":
+            ax.set_xscale("log", nonpositive="clip")
+        else:
+            ax.set_xscale(x_scale)
+    if y_scale:
+        if y_scale == "log":
+            ax.set_yscale("log", nonpositive="clip")
+        else:
+            ax.set_yscale(y_scale)
+
+
 def _style_axes(
     ax: plt.Axes,
     plot_spec: dict[str, Any],
@@ -116,6 +137,8 @@ def plot_absolute(
         include_doses=plot_spec.get("include_doses"),
         exclude_doses=plot_spec.get("exclude_doses"),
         exclude_reference=reference_sns,  # absolute plots exclude refs
+        lot=plot_spec.get("lot"),
+        bias=plot_spec.get("bias"),
     )
 
     if df.empty:
@@ -192,6 +215,7 @@ def plot_absolute(
         plot_spec,
         default_y_label=plot_spec.get("y_label", "Value"),
     )
+    _apply_axis_scales(ax, plot_spec)
     _apply_axis_limits(ax, plot_spec)
 
     out_path = _save_figure(fig, plot_spec, output_dir)
@@ -227,7 +251,9 @@ def plot_delta(
 
     delta_from = plot_spec["delta_from"]
     delta_to = plot_spec["delta_to"]
-    mode = plot_spec.get("delta_mode", "absolute")
+    # Delta plots are always rendered as relative percent change, by
+    # project convention. Any `delta_mode` in the config is ignored.
+    mode = "relative_percent"
 
     df = dl.filter_for_plot(
         master_df,
@@ -240,6 +266,8 @@ def plot_delta(
         include_doses=plot_spec.get("include_doses"),
         exclude_doses=plot_spec.get("exclude_doses"),
         exclude_reference=reference_sns,
+        lot=plot_spec.get("lot"),
+        bias=plot_spec.get("bias"),
     )
 
     deltas = dl.compute_deltas(df, delta_from=delta_from, delta_to=delta_to, mode=mode)
@@ -302,14 +330,13 @@ def plot_delta(
     # Reference line at zero - very useful for delta plots.
     ax.axhline(0, color="black", linewidth=0.8, alpha=0.6, zorder=1)
 
-    # Sensible default y-label if user didn't override.
-    default_y = (
-        "delta value [%]" if mode == "relative_percent" else "delta value"
-    )
+    # Always-percent delta plots get a "[%]" axis label by default.
+    default_y = "delta value [%]"
     if not plot_spec.get("y_label"):
         plot_spec = {**plot_spec, "y_label": default_y}
 
     _style_axes(ax, plot_spec, default_y_label=default_y)
+    _apply_axis_scales(ax, plot_spec)
     _apply_axis_limits(ax, plot_spec)
 
     out_path = _save_figure(fig, plot_spec, output_dir)
@@ -506,9 +533,13 @@ def plot_annealing(
         include_doses=plot_spec.get("include_doses"),
         exclude_doses=plot_spec.get("exclude_doses"),
         exclude_reference=reference_sns,
+        lot=plot_spec.get("lot"),
+        bias=plot_spec.get("bias"),
     )
 
     # Reference samples (controls) - separate subplot if any data.
+    # Lot / bias filters apply here too so e.g. the LOT-A panel only
+    # shows LOT-A reference samples.
     ref_df = master_df[
         (master_df["lcl_name"] == plot_spec["lcl_name"])
         & (master_df["measurement_type"] == plot_spec["measurement_type"])
@@ -518,6 +549,10 @@ def plot_annealing(
     ].copy()
     if plot_spec.get("context_key") is not None:
         ref_df = ref_df[ref_df["context_key"] == plot_spec["context_key"]]
+    if plot_spec.get("lot") is not None and "lot" in ref_df.columns:
+        ref_df = ref_df[ref_df["lot"].astype(str) == str(plot_spec["lot"])]
+    if plot_spec.get("bias") is not None and "bias" in ref_df.columns:
+        ref_df = ref_df[ref_df["bias"].astype(str) == str(plot_spec["bias"])]
 
     has_ref_data = not ref_df.empty
 
@@ -567,6 +602,10 @@ def plot_annealing(
         default_x_label="Stage",
         default_y_label=plot_spec.get("y_label", "Value"),
     )
+    # Annealing uses categorical positions on the X axis (0..N-1) so an X
+    # log scale doesn't make sense; respect Y log only.
+    if plot_spec.get("y_scale"):
+        _apply_axis_scales(ax_main, {"y_scale": plot_spec["y_scale"]})
     _apply_axis_limits(ax_main, plot_spec)
 
     n_ref_points = 0
@@ -590,6 +629,8 @@ def plot_annealing(
                 color="#7f7f7f",
             )
             n_ref_points += len(sub)
+        if plot_spec.get("y_scale"):
+            _apply_axis_scales(ax_ref, {"y_scale": plot_spec["y_scale"]})
         ax_ref.set_title("Reference")
         ax_ref.grid(True, linestyle="--", alpha=0.4)
         if ax_ref.get_legend_handles_labels()[0]:

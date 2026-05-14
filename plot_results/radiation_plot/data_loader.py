@@ -152,11 +152,20 @@ def load_flat_files(flat_files_dir: Path) -> pd.DataFrame:
     return combined.reset_index(drop=True)
 
 
-def attach_dose(df: pd.DataFrame, dose_map: dict[str, float]) -> pd.DataFrame:
-    """Add a numeric ``dose_krad`` column based on the dose map.
+def attach_dose(
+    df: pd.DataFrame,
+    dose_map: dict[str, float],
+    *,
+    lot_by_sn: dict[str, str] | None = None,
+    bias_by_sn: dict[str, str] | None = None,
+) -> pd.DataFrame:
+    """Add ``dose_krad``, ``lot`` and ``bias`` columns based on the dose map.
 
-    Rows whose serial number is not in the dose map get NaN and a one-line
-    warning so the user knows their config is incomplete.
+    Rows whose serial number is not in the dose map get NaN ``dose_krad``
+    and a one-line warning. SNs missing from ``lot_by_sn`` /
+    ``bias_by_sn`` get an empty-string value; this lets the ``lot:`` /
+    ``bias:`` filters work as a simple ``==`` check without producing
+    NaN propagation issues.
     """
     df = df.copy()
     df["dose_krad"] = df["lcl_serial_number"].map(dose_map)
@@ -169,6 +178,9 @@ def attach_dose(df: pd.DataFrame, dose_map: dict[str, float]) -> pd.DataFrame:
             int(missing_mask.sum()),
             unknown,
         )
+
+    df["lot"] = df["lcl_serial_number"].map(lot_by_sn or {}).fillna("")
+    df["bias"] = df["lcl_serial_number"].map(bias_by_sn or {}).fillna("")
     return df
 
 
@@ -194,6 +206,8 @@ def average_repeats(df: pd.DataFrame) -> pd.DataFrame:
             "unit",
             "data_origin",
             "dose_krad",
+            "lot",
+            "bias",
         }
     ]
     df_small = df[keep_cols].copy()
@@ -207,27 +221,41 @@ def average_repeats(df: pd.DataFrame) -> pd.DataFrame:
             n_collapsed,
         )
 
-    agg = grouped.agg(
+    agg_kwargs = dict(
         value_num=("value_num", "mean"),
         unit=("unit", "first"),
         data_origin=("data_origin", "first"),
         dose_krad=("dose_krad", "first"),
         n_repeats=("value_num", "size"),
     )
+    if "lot" in df_small.columns:
+        agg_kwargs["lot"] = ("lot", "first")
+    if "bias" in df_small.columns:
+        agg_kwargs["bias"] = ("bias", "first")
+    agg = grouped.agg(**agg_kwargs)
     return agg
 
 
 def build_master_dataframe(
     flat_files_dir: Path,
     dose_map: dict[str, float],
+    *,
+    lot_by_sn: dict[str, str] | None = None,
+    bias_by_sn: dict[str, str] | None = None,
 ) -> pd.DataFrame:
     """High-level helper used by the CLI.
 
-    Loads everything, attaches dose, collapses repeats. The returned frame
-    is the canonical "tidy" dataset that the plotters slice into.
+    Loads everything, attaches dose / lot / bias, collapses repeats. The
+    returned frame is the canonical "tidy" dataset that the plotters slice
+    into.
     """
     raw = load_flat_files(flat_files_dir)
-    with_dose = attach_dose(raw, dose_map)
+    with_dose = attach_dose(
+        raw,
+        dose_map,
+        lot_by_sn=lot_by_sn,
+        bias_by_sn=bias_by_sn,
+    )
     averaged = average_repeats(with_dose)
     logger.info(
         "Master dataframe ready: %d unique measurement points across "
@@ -251,6 +279,8 @@ def filter_for_plot(
     include_doses: list[float] | None = None,
     exclude_doses: list[float] | None = None,
     exclude_reference: list[str] | None = None,
+    lot: str | None = None,
+    bias: str | None = None,
 ) -> pd.DataFrame:
     """Slice the master dataframe according to the plot spec.
 
@@ -281,6 +311,12 @@ def filter_for_plot(
 
     if exclude_doses:
         mask &= ~df["dose_krad"].isin(exclude_doses)
+
+    if lot is not None and "lot" in df.columns:
+        mask &= df["lot"].astype(str) == str(lot)
+
+    if bias is not None and "bias" in df.columns:
+        mask &= df["bias"].astype(str) == str(bias)
 
     return df[mask].copy()
 
