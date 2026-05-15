@@ -272,7 +272,7 @@ def filter_for_plot(
     *,
     lcl_name: str,
     measurement_type: str,
-    metric: str,
+    metric: str | list[str],
     context_key: str | None = None,
     stages: list[str] | None = None,
     exclude_sn: list[str] | None = None,
@@ -288,11 +288,14 @@ def filter_for_plot(
     for metrics that don't have variants (``iq_ua``, ``ish_ua``, ...).
     If ``context_key`` is given but does not match anything, the result is
     an empty frame and the caller is expected to log/skip.
+
+    ``metric`` can be a string (single metric) or a list of strings (multiple metrics).
     """
+    metrics_list = metric if isinstance(metric, list) else [metric]
     mask = (
         (df["lcl_name"] == lcl_name)
         & (df["measurement_type"] == measurement_type)
-        & (df["metric"] == metric)
+        & (df["metric"].isin(metrics_list))
     )
     if context_key is not None:
         mask &= df["context_key"] == context_key

@@ -22,10 +22,155 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from . import config as _cfg
 from . import data_loader as dl
 
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# series_by helpers
+# ---------------------------------------------------------------------------
+
+
+def _normalize_series_by(spec: dict[str, Any]) -> list[str]:
+    """Return ``series_by`` as a list (accepts string or list in YAML)."""
+    sb = spec.get("series_by")
+    if not sb:
+        return []
+    if isinstance(sb, str):
+        return [sb]
+    return list(sb)
+
+
+def _series_combos(
+    df: pd.DataFrame,
+    series_by: list[str],
+) -> list[dict[str, str]]:
+    """Build the cartesian product of values present in ``df`` for each
+    dimension in ``series_by``. Returns a list of dicts mapping dim -> value.
+
+    Returns ``[{}]`` (one empty combo) when ``series_by`` is empty so callers
+    can iterate uniformly regardless of whether series splitting is active.
+    """
+    if not series_by:
+        return [{}]
+    combos: list[dict[str, str]] = [{}]
+    for dim in series_by:
+        if dim not in df.columns:
+            continue
+        values = sorted(v for v in df[dim].dropna().unique() if str(v) != "")
+        if not values:
+            continue
+        combos = [{**c, dim: v} for c in combos for v in values]
+    return combos or [{}]
+
+
+def _filter_to_combo(df: pd.DataFrame, combo: dict[str, str]) -> pd.DataFrame:
+    """Return rows of ``df`` matching every key=value pair in ``combo``."""
+    if not combo:
+        return df
+    mask = pd.Series(True, index=df.index)
+    for dim, value in combo.items():
+        if dim in df.columns:
+            mask &= df[dim].astype(str) == str(value)
+    return df[mask]
+
+
+def _combo_label(combo: dict[str, str]) -> str:
+    """Short human-readable label for a series_by combo (e.g. ``"LOT A"``)."""
+    parts: list[str] = []
+    for dim, value in combo.items():
+        if dim == "lot":
+            parts.append(f"LOT {value}")
+        elif dim == "bias":
+            parts.append(str(value))
+        else:
+            parts.append(f"{dim}={value}")
+    return " / ".join(parts)
+
+
+def _series_color(
+    metric_color: Any,
+    combo_index: int,
+    n_combos: int,
+) -> Any:
+    """Pick a colour for one series within a (metric, combo) family.
+
+    When ``series_by`` is unused (n_combos == 1), the metric colour is
+    returned unchanged. With multiple combos, we shift the colour around
+    the tab10 palette so each combo for the same metric stays visually
+    related but distinct.
+    """
+    if n_combos <= 1:
+        return metric_color
+    cmap = plt.get_cmap("tab10")
+    return cmap(combo_index % 10)
+
+
+# ---------------------------------------------------------------------------
+# Subplot helpers
+# ---------------------------------------------------------------------------
+
+
+def _resolve_subplot_specs(plot_spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build per-subplot merged specs.
+
+    Each subplot inherits every key from the parent spec *except* ``title``
+    (the parent's title becomes the figure suptitle) and ``subplots``
+    itself. Subplot-specific overrides win on conflict.
+    """
+    subplots = plot_spec.get("subplots") or []
+    if not subplots:
+        return []
+    parent_inherited = {
+        k: v for k, v in plot_spec.items() if k not in ("subplots", "title")
+    }
+    resolved: list[dict[str, Any]] = []
+    for sub in subplots:
+        if not isinstance(sub, dict):
+            raise ValueError(
+                f"plot '{plot_spec.get('name')}': each subplot must be a "
+                f"mapping, got {type(sub).__name__}"
+            )
+        resolved.append(_cfg._deep_merge(parent_inherited, sub))
+    return resolved
+
+
+def _subplot_grid(n_panels: int, layout: str) -> tuple[int, int]:
+    """Return ``(nrows, ncols)`` for a subplot grid.
+
+    ``layout`` is ``"rows"`` (stacked vertically, default), ``"cols"``
+    (side-by-side), or ``"grid"`` (a roughly square grid).
+    """
+    import math
+
+    if n_panels <= 0:
+        return (1, 1)
+    if layout == "cols":
+        return (1, n_panels)
+    if layout == "grid":
+        cols = math.ceil(math.sqrt(n_panels))
+        rows = math.ceil(n_panels / cols)
+        return (rows, cols)
+    return (n_panels, 1)
+
+
+def _default_figsize_for_subplots(
+    plot_spec: dict[str, Any],
+    n_panels: int,
+    layout: str,
+) -> list[float]:
+    """Pick a sensible default figsize when the user didn't set one."""
+    if "figsize" in plot_spec:
+        return list(plot_spec["figsize"])
+    if layout == "cols":
+        return [max(6 * n_panels, 8), 6]
+    if layout == "grid":
+        nrows, ncols = _subplot_grid(n_panels, "grid")
+        return [max(5 * ncols, 8), max(4 * nrows, 5)]
+    return [10, max(4 * n_panels, 5)]
 
 
 # ---------------------------------------------------------------------------
@@ -43,6 +188,45 @@ def _apply_axis_limits(ax: plt.Axes, plot_spec: dict[str, Any]) -> None:
         ax.set_ylim(y_lim[0], y_lim[1])
 
 
+def _apply_dose_ticks(ax: plt.Axes) -> None:
+    """Set standard dose ticks for log scale (1, 2, 5, 10, 15, 25, 40 kRad)."""
+    standard_ticks = [1, 2, 5, 10, 15, 25, 40]
+    ax.set_xticks(standard_ticks)
+    ax.set_xticklabels([str(t) for t in standard_ticks])
+
+
+def _draw_reference_lines(ax: plt.Axes, plot_spec: dict[str, Any]) -> None:
+    """Draw reference / limit lines defined in ``reference_lines:``.
+
+    Each entry is a mapping with exactly one of ``y`` (horizontal) or
+    ``x`` (vertical), plus optional ``label`` (legend entry), ``color``
+    (default ``red``), ``linestyle`` (default ``"--"``), ``linewidth``
+    (default 1.2) and ``alpha`` (default 0.8). Use it for spec limits
+    such as the ±8 % I_lim accuracy window.
+
+    Lines are drawn behind data (``zorder=1.5``) so they read as a
+    background reference rather than competing with the points.
+    """
+    lines = plot_spec.get("reference_lines") or []
+    for entry in lines:
+        if not isinstance(entry, dict):
+            continue
+        kwargs: dict[str, Any] = {
+            "color": entry.get("color", "red"),
+            "linestyle": entry.get("linestyle", "--"),
+            "linewidth": entry.get("linewidth", 1.2),
+            "alpha": entry.get("alpha", 0.8),
+            "zorder": 1.5,
+        }
+        label = entry.get("label")
+        if label:
+            kwargs["label"] = label
+        if "y" in entry:
+            ax.axhline(float(entry["y"]), **kwargs)
+        elif "x" in entry:
+            ax.axvline(float(entry["x"]), **kwargs)
+
+
 def _apply_axis_scales(ax: plt.Axes, plot_spec: dict[str, Any]) -> None:
     """Apply optional ``x_scale`` / ``y_scale`` (``"linear"`` / ``"log"``).
 
@@ -55,6 +239,7 @@ def _apply_axis_scales(ax: plt.Axes, plot_spec: dict[str, Any]) -> None:
     if x_scale:
         if x_scale == "log":
             ax.set_xscale("log", nonpositive="clip")
+            _apply_dose_ticks(ax)
         else:
             ax.set_xscale(x_scale)
     if y_scale:
@@ -92,6 +277,22 @@ def _stat_line_styles(stat: str) -> dict[str, Any]:
     }[stat]
 
 
+def _get_metric_colors(metrics: list[str]) -> dict[str, str]:
+    """Assign distinct colors to each metric for multi-metric plots.
+
+    Uses tab10 colormap for up to 10 metrics; for more, cycles through.
+    """
+    if len(metrics) == 1:
+        return {metrics[0]: "#1f77b4"}  # Default matplotlib blue
+
+    cmap = plt.get_cmap("tab10")
+    colors = {}
+    for i, metric_name in enumerate(metrics):
+        color_idx = i % 10
+        colors[metric_name] = cmap(color_idx)
+    return colors
+
+
 def _save_figure(
     fig: plt.Figure,
     plot_spec: dict[str, Any],
@@ -113,6 +314,176 @@ def _save_figure(
 # ---------------------------------------------------------------------------
 
 
+def _draw_absolute_on_ax(
+    ax: plt.Axes,
+    master_df: pd.DataFrame,
+    plot_spec: dict[str, Any],
+    reference_sns: list[str],
+) -> tuple[int, int, bool]:
+    """Render absolute plot content onto a single Axes.
+
+    Returns ``(n_points, n_series, has_data)``. Does NOT touch the figure
+    (no save, no suptitle, no note) - the caller is responsible for that.
+    """
+    stages: list[str] = plot_spec["stages"]
+    stage_styles = plot_spec.get("stage_styles", {})
+    stage_labels = plot_spec.get("stage_labels", {})
+
+    metric_param = plot_spec["metric"]
+    metrics_to_plot = metric_param if isinstance(metric_param, list) else [metric_param]
+
+    df = dl.filter_for_plot(
+        master_df,
+        lcl_name=plot_spec["lcl_name"],
+        measurement_type=plot_spec["measurement_type"],
+        metric=metric_param,
+        context_key=plot_spec.get("context_key"),
+        stages=stages,
+        exclude_sn=plot_spec.get("exclude_sn"),
+        include_doses=plot_spec.get("include_doses"),
+        exclude_doses=plot_spec.get("exclude_doses"),
+        exclude_reference=reference_sns,
+        lot=plot_spec.get("lot"),
+        bias=plot_spec.get("bias"),
+    )
+
+    if df.empty:
+        return 0, 0, False
+
+    show_points = plot_spec.get("show_points", True)
+    show_lines: list[str] = plot_spec.get("show_lines", [])
+    series_by = _normalize_series_by(plot_spec)
+
+    metric_colors = _get_metric_colors(metrics_to_plot)
+    combos = _series_combos(df, series_by)
+
+    total_points = 0
+    n_series_drawn = 0
+
+    for metric_name in metrics_to_plot:
+        metric_df = df[df["metric"] == metric_name]
+        if metric_df.empty:
+            continue
+
+        base_metric_color = metric_colors[metric_name]
+        metric_label = metric_name if len(metrics_to_plot) > 1 else None
+
+        for combo_idx, combo in enumerate(combos):
+            combo_df = _filter_to_combo(metric_df, combo)
+            if combo_df.empty:
+                continue
+
+            series_color = _series_color(
+                base_metric_color, combo_idx, len(combos)
+            )
+            combo_lbl = _combo_label(combo)
+
+            for stage in stages:
+                stage_df = combo_df[combo_df["irradiation_stage"] == stage]
+                if stage_df.empty:
+                    continue
+
+                style = stage_styles.get(stage, {})
+                marker = style.get("marker", "o")
+                label_base = stage_labels.get(stage, stage)
+
+                label_parts = [metric_label, label_base, combo_lbl]
+                full_label = " - ".join([p for p in label_parts if p])
+
+                if show_points:
+                    ax.scatter(
+                        stage_df["dose_krad"],
+                        stage_df["value_num"],
+                        s=plot_spec.get("marker_size", 40),
+                        alpha=plot_spec.get("alpha_points", 0.65),
+                        color=series_color,
+                        marker=marker,
+                        label=(
+                            f"{full_label} (points)" if not show_lines else full_label
+                        ),
+                        edgecolors="black",
+                        linewidths=0.4,
+                        zorder=2,
+                    )
+                    total_points += len(stage_df)
+
+                if show_lines:
+                    stats = dl.compute_stats_by_dose(stage_df)
+                    if not stats.empty:
+                        for stat in show_lines:
+                            if stat not in stats.columns:
+                                continue
+                            style_kwargs = _stat_line_styles(stat)
+                            ax.plot(
+                                stats["dose_krad"],
+                                stats[stat],
+                                color=series_color,
+                                marker="",
+                                label=f"{full_label} {stat}",
+                                zorder=3,
+                                **style_kwargs,
+                            )
+                    n_series_drawn += 1
+
+                if not show_lines:
+                    n_series_drawn += 1
+
+    show_baseline = plot_spec.get(
+        "show_before_at_zero", "before_irradiate" in stages
+    )
+    if show_baseline and "before_irradiate" in stages:
+        baseline_style = stage_styles.get("before_irradiate", {})
+        baseline_marker = baseline_style.get("marker", "o")
+        for metric_name in metrics_to_plot:
+            metric_df = df[
+                (df["metric"] == metric_name)
+                & (df["irradiation_stage"] == "before_irradiate")
+            ]
+            if metric_df.empty:
+                continue
+            base_metric_color = metric_colors[metric_name]
+            for combo_idx, combo in enumerate(combos):
+                combo_df = _filter_to_combo(metric_df, combo)
+                if combo_df.empty:
+                    continue
+                series_color = _series_color(
+                    base_metric_color, combo_idx, len(combos)
+                )
+                ax.scatter(
+                    [0] * len(combo_df),
+                    combo_df["value_num"],
+                    s=plot_spec.get("marker_size", 40),
+                    alpha=plot_spec.get("alpha_points", 0.65),
+                    color=series_color,
+                    marker=baseline_marker,
+                    edgecolors="black",
+                    linewidths=0.4,
+                    zorder=2,
+                    label=None,
+                )
+
+    _draw_reference_lines(ax, plot_spec)
+
+    # Append " - by LOT / bias" to title when series_by is in effect.
+    styled_spec = plot_spec
+    if series_by:
+        styled_spec = {
+            **plot_spec,
+            "title": (plot_spec.get("title") or "")
+            + _cfg.title_suffix_for_series_by(series_by),
+        }
+
+    _style_axes(
+        ax,
+        styled_spec,
+        default_y_label=styled_spec.get("y_label", "Value"),
+    )
+    _apply_axis_scales(ax, styled_spec)
+    _apply_axis_limits(ax, styled_spec)
+
+    return total_points, n_series_drawn, True
+
+
 def plot_absolute(
     master_df: pd.DataFrame,
     plot_spec: dict[str, Any],
@@ -120,28 +491,33 @@ def plot_absolute(
     output_dir: Path,
     reference_sns: list[str],
 ) -> dict[str, Any]:
-    """Raw measurement value vs dose, one coloured series per stage."""
+    """Raw measurement value vs dose, one coloured series per stage/metric.
 
-    stages: list[str] = plot_spec["stages"]
-    stage_styles = plot_spec.get("stage_styles", {})
-    stage_labels = plot_spec.get("stage_labels", {})
+    Supports single metric (string) or multiple metrics (list).
+    When multiple metrics, each gets a different color; stages vary by marker.
 
-    df = dl.filter_for_plot(
-        master_df,
-        lcl_name=plot_spec["lcl_name"],
-        measurement_type=plot_spec["measurement_type"],
-        metric=plot_spec["metric"],
-        context_key=plot_spec.get("context_key"),
-        stages=stages,
-        exclude_sn=plot_spec.get("exclude_sn"),
-        include_doses=plot_spec.get("include_doses"),
-        exclude_doses=plot_spec.get("exclude_doses"),
-        exclude_reference=reference_sns,  # absolute plots exclude refs
-        lot=plot_spec.get("lot"),
-        bias=plot_spec.get("bias"),
+    When ``subplots:`` is present on the spec, the figure is divided into
+    one Axes per subplot entry, each inheriting from the parent spec but
+    free to override filters, limits, ``series_by``, etc.
+    """
+    if plot_spec.get("subplots"):
+        return _render_with_subplots(
+            master_df,
+            plot_spec,
+            output_dir=output_dir,
+            reference_sns=reference_sns,
+            draw_on_ax=_draw_absolute_on_ax,
+        )
+
+    figsize = plot_spec.get("figsize", [10, 6])
+    fig, ax = plt.subplots(figsize=figsize)
+
+    total_points, n_series_drawn, has_data = _draw_absolute_on_ax(
+        ax, master_df, plot_spec, reference_sns
     )
 
-    if df.empty:
+    if not has_data:
+        plt.close(fig)
         logger.warning(
             "Plot '%s': no data after filtering - skipped.",
             plot_spec["output_name"],
@@ -155,72 +531,13 @@ def plot_absolute(
             "reason": "no data after filtering",
         }
 
-    figsize = plot_spec.get("figsize", [10, 6])
-    fig, ax = plt.subplots(figsize=figsize)
-
-    show_points = plot_spec.get("show_points", True)
-    show_lines: list[str] = plot_spec.get("show_lines", [])
-
-    total_points = 0
-    n_series_drawn = 0
-
-    for stage in stages:
-        stage_df = df[df["irradiation_stage"] == stage]
-        if stage_df.empty:
-            continue
-
-        style = stage_styles.get(stage, {})
-        color = style.get("color")
-        marker = style.get("marker", "o")
-        label_base = stage_labels.get(stage, stage)
-
-        if show_points:
-            ax.scatter(
-                stage_df["dose_krad"],
-                stage_df["value_num"],
-                s=plot_spec.get("marker_size", 40),
-                alpha=plot_spec.get("alpha_points", 0.65),
-                color=color,
-                marker=marker,
-                label=f"{label_base} (points)" if not show_lines else label_base,
-                edgecolors="black",
-                linewidths=0.4,
-                zorder=2,
-            )
-            total_points += len(stage_df)
-
-        if show_lines:
-            stats = dl.compute_stats_by_dose(stage_df)
-            if not stats.empty:
-                for stat in show_lines:
-                    if stat not in stats.columns:
-                        continue
-                    style_kwargs = _stat_line_styles(stat)
-                    ax.plot(
-                        stats["dose_krad"],
-                        stats[stat],
-                        color=color,
-                        marker="",
-                        label=f"{label_base} {stat}",
-                        zorder=3,
-                        **style_kwargs,
-                    )
-            n_series_drawn += 1
-
-        if not show_lines:
-            n_series_drawn += 1
-
-    _style_axes(
-        ax,
-        plot_spec,
-        default_y_label=plot_spec.get("y_label", "Value"),
-    )
-    _apply_axis_scales(ax, plot_spec)
-    _apply_axis_limits(ax, plot_spec)
+    if plot_spec.get("note"):
+        fig.text(0.5, 0.02, plot_spec["note"], ha="center", fontsize=8,
+                 style="italic", wrap=True, color="#666666")
 
     out_path = _save_figure(fig, plot_spec, output_dir)
     logger.info(
-        "Saved '%s' (%d points across %d stages)",
+        "Saved '%s' (%d points across %d metrics/stages)",
         out_path.name,
         total_points,
         n_series_drawn,
@@ -235,24 +552,140 @@ def plot_absolute(
     }
 
 
-# ---------------------------------------------------------------------------
-# Plot type 2: DELTA
-# ---------------------------------------------------------------------------
-
-
-def plot_delta(
+def _render_with_subplots(
     master_df: pd.DataFrame,
     plot_spec: dict[str, Any],
     *,
     output_dir: Path,
     reference_sns: list[str],
+    draw_on_ax: Any,
 ) -> dict[str, Any]:
-    """Per-SN delta between two stages, plotted against dose."""
+    """Shared subplot dispatcher for absolute/delta plots.
 
+    Builds a figure with one Axes per entry in ``plot_spec['subplots']``
+    and delegates rendering to ``draw_on_ax(ax, master_df, sub_spec,
+    reference_sns)``. The parent's ``title`` becomes the figure suptitle.
+    """
+    try:
+        sub_specs = _resolve_subplot_specs(plot_spec)
+    except ValueError as exc:
+        logger.error("Plot '%s': %s", plot_spec.get("output_name"), exc)
+        return {
+            "output_name": plot_spec.get("output_name", "<unknown>"),
+            "output_path": None,
+            "n_points": 0,
+            "n_series": 0,
+            "skipped": True,
+            "reason": str(exc),
+        }
+    if not sub_specs:
+        return {
+            "output_name": plot_spec["output_name"],
+            "output_path": None,
+            "n_points": 0,
+            "n_series": 0,
+            "skipped": True,
+            "reason": "subplots list is empty",
+        }
+
+    n = len(sub_specs)
+    layout = plot_spec.get("subplot_layout", "rows")
+    nrows, ncols = _subplot_grid(n, layout)
+    figsize = _default_figsize_for_subplots(plot_spec, n, layout)
+
+    fig, axes = plt.subplots(
+        nrows,
+        ncols,
+        figsize=figsize,
+        sharex=plot_spec.get("share_x", True),
+        sharey=plot_spec.get("share_y", False),
+        squeeze=False,
+    )
+    axes_flat = list(axes.flatten())
+
+    total_points = 0
+    total_series = 0
+    any_data = False
+    for ax, sub_spec in zip(axes_flat, sub_specs):
+        n_pts, n_ser, has = draw_on_ax(
+            ax, master_df, sub_spec, reference_sns
+        )
+        total_points += n_pts
+        total_series += n_ser
+        any_data = any_data or has
+        if not has:
+            ax.text(
+                0.5,
+                0.5,
+                "no data",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+                color="#999999",
+                fontsize=10,
+                style="italic",
+            )
+
+    # Hide unused axes (when grid has more cells than panels).
+    for ax in axes_flat[len(sub_specs):]:
+        ax.set_visible(False)
+
+    if not any_data:
+        plt.close(fig)
+        logger.warning(
+            "Plot '%s': no data in any subplot - skipped.",
+            plot_spec["output_name"],
+        )
+        return {
+            "output_name": plot_spec["output_name"],
+            "output_path": None,
+            "n_points": 0,
+            "n_series": 0,
+            "skipped": True,
+            "reason": "no data after filtering",
+        }
+
+    if plot_spec.get("title"):
+        fig.suptitle(plot_spec["title"], fontsize=12, fontweight="bold")
+    if plot_spec.get("note"):
+        fig.text(0.5, 0.02, plot_spec["note"], ha="center", fontsize=8,
+                 style="italic", wrap=True, color="#666666")
+
+    out_path = _save_figure(fig, plot_spec, output_dir)
+    logger.info(
+        "Saved '%s' (%d panels, %d points, %d series)",
+        out_path.name,
+        n,
+        total_points,
+        total_series,
+    )
+    return {
+        "output_name": plot_spec["output_name"],
+        "output_path": str(out_path),
+        "n_points": total_points,
+        "n_series": total_series,
+        "skipped": False,
+        "reason": "",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Plot type 2: DELTA
+# ---------------------------------------------------------------------------
+
+
+def _draw_delta_on_ax(
+    ax: plt.Axes,
+    master_df: pd.DataFrame,
+    plot_spec: dict[str, Any],
+    reference_sns: list[str],
+) -> tuple[int, int, bool]:
+    """Render delta plot content onto a single Axes.
+
+    Returns ``(n_points, n_series, has_data)``.
+    """
     delta_from = plot_spec["delta_from"]
     delta_to = plot_spec["delta_to"]
-    # Delta plots are always rendered as relative percent change, by
-    # project convention. Any `delta_mode` in the config is ignored.
     mode = "relative_percent"
 
     df = dl.filter_for_plot(
@@ -271,13 +704,125 @@ def plot_delta(
     )
 
     deltas = dl.compute_deltas(df, delta_from=delta_from, delta_to=delta_to, mode=mode)
-
     if deltas.empty:
+        return 0, 0, False
+
+    show_points = plot_spec.get("show_points", True)
+    show_lines: list[str] = plot_spec.get("show_lines", [])
+    series_by = _normalize_series_by(plot_spec)
+
+    if series_by:
+        sn_attrs_cols = ["lcl_serial_number"] + [
+            c for c in series_by if c in df.columns
+        ]
+        sn_attrs = (
+            df[sn_attrs_cols].drop_duplicates(subset=["lcl_serial_number"])
+        )
+        deltas = deltas.merge(sn_attrs, on="lcl_serial_number", how="left")
+
+    combos = _series_combos(deltas, series_by)
+    total_points = 0
+    n_series_drawn = 0
+
+    for combo_idx, combo in enumerate(combos):
+        combo_df = _filter_to_combo(deltas, combo)
+        if combo_df.empty:
+            continue
+        series_color = _series_color("#1f77b4", combo_idx, len(combos))
+        combo_lbl = _combo_label(combo)
+        base_label = combo_lbl if combo_lbl else "Per-SN delta"
+
+        if show_points:
+            ax.scatter(
+                combo_df["dose_krad"],
+                combo_df["delta"],
+                s=plot_spec.get("marker_size", 40),
+                alpha=plot_spec.get("alpha_points", 0.65),
+                color=series_color,
+                label=base_label,
+                edgecolors="black",
+                linewidths=0.4,
+                zorder=2,
+            )
+            total_points += len(combo_df)
+
+        if show_lines:
+            renamed = combo_df.rename(columns={"delta": "value_num"})
+            stats = dl.compute_stats_by_dose(renamed)
+            if not stats.empty:
+                for stat in show_lines:
+                    if stat not in stats.columns:
+                        continue
+                    style_kwargs = _stat_line_styles(stat)
+                    line_label = (
+                        f"{combo_lbl} {stat}" if combo_lbl else stat
+                    )
+                    ax.plot(
+                        stats["dose_krad"],
+                        stats[stat],
+                        color=series_color,
+                        marker="",
+                        label=line_label,
+                        zorder=3,
+                        **style_kwargs,
+                    )
+        n_series_drawn += 1
+
+    ax.axhline(0, color="black", linewidth=0.8, alpha=0.6, zorder=1)
+
+    _draw_reference_lines(ax, plot_spec)
+
+    default_y = "delta value [%]"
+    styled_spec = plot_spec
+    if not plot_spec.get("y_label"):
+        styled_spec = {**styled_spec, "y_label": default_y}
+    if series_by:
+        styled_spec = {
+            **styled_spec,
+            "title": (styled_spec.get("title") or "")
+            + _cfg.title_suffix_for_series_by(series_by),
+        }
+
+    _style_axes(ax, styled_spec, default_y_label=default_y)
+    _apply_axis_scales(ax, styled_spec)
+    _apply_axis_limits(ax, styled_spec)
+
+    return total_points, max(n_series_drawn, 1), True
+
+
+def plot_delta(
+    master_df: pd.DataFrame,
+    plot_spec: dict[str, Any],
+    *,
+    output_dir: Path,
+    reference_sns: list[str],
+) -> dict[str, Any]:
+    """Per-SN delta between two stages, plotted against dose.
+
+    Supports ``subplots:`` (one Axes per entry, each can override filters
+    / limits / series_by).
+    """
+    if plot_spec.get("subplots"):
+        return _render_with_subplots(
+            master_df,
+            plot_spec,
+            output_dir=output_dir,
+            reference_sns=reference_sns,
+            draw_on_ax=_draw_delta_on_ax,
+        )
+
+    figsize = plot_spec.get("figsize", [10, 6])
+    fig, ax = plt.subplots(figsize=figsize)
+
+    total_points, n_series_drawn, has_data = _draw_delta_on_ax(
+        ax, master_df, plot_spec, reference_sns
+    )
+
+    if not has_data:
+        plt.close(fig)
         logger.warning(
-            "Plot '%s': no SN has both '%s' and '%s' measurements - skipped.",
+            "Plot '%s': no SN has both stages - skipped.",
             plot_spec["output_name"],
-            delta_from,
-            delta_to,
         )
         return {
             "output_name": plot_spec["output_name"],
@@ -285,71 +830,28 @@ def plot_delta(
             "n_points": 0,
             "n_series": 0,
             "skipped": True,
-            "reason": f"no SN with both {delta_from} and {delta_to}",
+            "reason": (
+                f"no SN with both {plot_spec['delta_from']} and "
+                f"{plot_spec['delta_to']}"
+            ),
         }
 
-    figsize = plot_spec.get("figsize", [10, 6])
-    fig, ax = plt.subplots(figsize=figsize)
-
-    show_points = plot_spec.get("show_points", True)
-    show_lines: list[str] = plot_spec.get("show_lines", [])
-
-    color = "#444444"
-    if show_points:
-        ax.scatter(
-            deltas["dose_krad"],
-            deltas["delta"],
-            s=plot_spec.get("marker_size", 40),
-            alpha=plot_spec.get("alpha_points", 0.65),
-            color="#1f77b4",
-            label="Per-SN delta",
-            edgecolors="black",
-            linewidths=0.4,
-            zorder=2,
-        )
-
-    if show_lines:
-        # Build a tiny frame compatible with compute_stats_by_dose
-        renamed = deltas.rename(columns={"delta": "value_num"})
-        stats = dl.compute_stats_by_dose(renamed)
-        if not stats.empty:
-            for stat in show_lines:
-                if stat not in stats.columns:
-                    continue
-                style_kwargs = _stat_line_styles(stat)
-                ax.plot(
-                    stats["dose_krad"],
-                    stats[stat],
-                    color=color,
-                    marker="",
-                    label=stat,
-                    zorder=3,
-                    **style_kwargs,
-                )
-
-    # Reference line at zero - very useful for delta plots.
-    ax.axhline(0, color="black", linewidth=0.8, alpha=0.6, zorder=1)
-
-    # Always-percent delta plots get a "[%]" axis label by default.
-    default_y = "delta value [%]"
-    if not plot_spec.get("y_label"):
-        plot_spec = {**plot_spec, "y_label": default_y}
-
-    _style_axes(ax, plot_spec, default_y_label=default_y)
-    _apply_axis_scales(ax, plot_spec)
-    _apply_axis_limits(ax, plot_spec)
+    if plot_spec.get("note"):
+        fig.text(0.5, 0.02, plot_spec["note"], ha="center", fontsize=8,
+                 style="italic", wrap=True, color="#666666")
 
     out_path = _save_figure(fig, plot_spec, output_dir)
     logger.info(
-        "Saved '%s' (%d deltas)",
+        "Saved '%s' (%d deltas, %d series)",
         out_path.name,
-        len(deltas),
+        total_points,
+        n_series_drawn,
     )
     return {
         "output_name": plot_spec["output_name"],
         "output_path": str(out_path),
-        "n_points": int(len(deltas)),
-        "n_series": 1,
+        "n_points": total_points,
+        "n_series": n_series_drawn,
         "skipped": False,
         "reason": "",
     }
@@ -596,6 +1098,8 @@ def plot_annealing(
         all_doses_for_color=all_doses,
     )
 
+    _draw_reference_lines(ax_main, plot_spec)
+
     _style_axes(
         ax_main,
         plot_spec,
@@ -635,6 +1139,11 @@ def plot_annealing(
         ax_ref.grid(True, linestyle="--", alpha=0.4)
         if ax_ref.get_legend_handles_labels()[0]:
             ax_ref.legend(loc="best", fontsize=8, framealpha=0.9)
+
+    # Add note if present
+    if plot_spec.get("note"):
+        fig.text(0.5, 0.02, plot_spec["note"], ha="center", fontsize=8,
+                 style="italic", wrap=True, color="#666666")
 
     out_path = _save_figure(fig, plot_spec, output_dir)
     logger.info(

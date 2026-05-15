@@ -45,6 +45,10 @@ SUPPORTED_AXIS_SCALES = {"linear", "log", "symlog"}
 # combination of values for the listed dimensions.
 SUPPORTED_SPLIT_DIMS = {"lot", "bias"}
 
+# Tokens accepted in `series_by`. Unlike split_by, this produces a single
+# PNG with one *series* per group value (e.g. Lot A & Lot B on one plot).
+SUPPORTED_SERIES_DIMS = {"lot", "bias"}
+
 # Required fields per plot type. Extra fields are allowed (and ignored
 # here - the plotter is responsible for picking them up).
 REQUIRED_FIELDS_BY_TYPE: dict[str, set[str]] = {
@@ -362,29 +366,85 @@ def _validate_plot_entry(plot: dict[str, Any], index: int) -> None:
     if bias is not None and not isinstance(bias, str):
         raise ConfigError(f"{where} ({name}): `bias` must be a string")
 
-    split_by = plot.get("split_by")
-    if split_by is not None:
-        if isinstance(split_by, str):
-            split_by_list = [split_by]
-        elif isinstance(split_by, list):
-            split_by_list = split_by
+    ref_lines = plot.get("reference_lines")
+    if ref_lines is not None:
+        if not isinstance(ref_lines, list):
+            raise ConfigError(
+                f"{where} ({name}): `reference_lines` must be a list"
+            )
+        for i, ln in enumerate(ref_lines):
+            if not isinstance(ln, dict):
+                raise ConfigError(
+                    f"{where} ({name}): reference_lines[{i}] must be a mapping"
+                )
+            has_y = "y" in ln
+            has_x = "x" in ln
+            if has_y == has_x:
+                raise ConfigError(
+                    f"{where} ({name}): reference_lines[{i}] must have "
+                    f"exactly one of `y` or `x`"
+                )
+            key = "y" if has_y else "x"
+            try:
+                float(ln[key])
+            except (TypeError, ValueError) as exc:
+                raise ConfigError(
+                    f"{where} ({name}): reference_lines[{i}].{key} is not a "
+                    f"number: {ln[key]!r}"
+                ) from exc
+
+    subplots = plot.get("subplots")
+    if subplots is not None:
+        if ptype not in {"absolute", "delta"}:
+            raise ConfigError(
+                f"{where} ({name}): `subplots` is currently supported only "
+                f"for 'absolute' and 'delta' plot types (got '{ptype}'). "
+                f"Use `split_by` to compare groups on annealing plots."
+            )
+        if not isinstance(subplots, list) or not subplots:
+            raise ConfigError(
+                f"{where} ({name}): `subplots` must be a non-empty list"
+            )
+        for i, sub in enumerate(subplots):
+            if not isinstance(sub, dict):
+                raise ConfigError(
+                    f"{where} ({name}): subplots[{i}] must be a mapping"
+                )
+        layout = plot.get("subplot_layout")
+        if layout is not None and layout not in {"rows", "cols", "grid"}:
+            raise ConfigError(
+                f"{where} ({name}): `subplot_layout` must be 'rows', "
+                f"'cols' or 'grid'; got {layout!r}"
+            )
+
+    for field_name, allowed in (
+        ("split_by", SUPPORTED_SPLIT_DIMS),
+        ("series_by", SUPPORTED_SERIES_DIMS),
+    ):
+        value = plot.get(field_name)
+        if value is None:
+            continue
+        if isinstance(value, str):
+            value_list = [value]
+        elif isinstance(value, list):
+            value_list = value
         else:
             raise ConfigError(
-                f"{where} ({name}): `split_by` must be a string or list of "
-                f"strings; got {type(split_by).__name__}"
+                f"{where} ({name}): `{field_name}` must be a string or list "
+                f"of strings; got {type(value).__name__}"
             )
-        bad = [t for t in split_by_list if t not in SUPPORTED_SPLIT_DIMS]
+        bad = [t for t in value_list if t not in allowed]
         if bad:
             raise ConfigError(
-                f"{where} ({name}): unknown split_by tokens {bad}. "
-                f"Supported: {sorted(SUPPORTED_SPLIT_DIMS)}"
+                f"{where} ({name}): unknown {field_name} tokens {bad}. "
+                f"Supported: {sorted(allowed)}"
             )
         # Normalise to list, preserve order, drop duplicates.
         seen: list[str] = []
-        for t in split_by_list:
+        for t in value_list:
             if t not in seen:
                 seen.append(t)
-        plot["split_by"] = seen
+        plot[field_name] = seen
 
 
 def load_plot_config(path: Path) -> dict[str, Any]:
@@ -532,20 +592,52 @@ def expand_splits(
         for combo in combos:
             new_spec = copy.deepcopy(spec)
             suffix_parts: list[str] = []
+            title_parts: list[str] = []
             for dim, value in combo:
                 if dim == "lot":
                     new_spec["lot"] = value
                     suffix_parts.append(f"lot{value}")
+                    title_parts.append(f"LOT {value}")
                 elif dim == "bias":
                     new_spec["bias"] = value
                     suffix_parts.append(value)
+                    # "bias" / "unbias" already self-explanatory in title
+                    title_parts.append(str(value))
             suffix = "_" + "_".join(suffix_parts)
             new_spec["output_name"] = f"{spec['output_name']}{suffix}"
+            # Append the split group to the title so each PNG advertises
+            # which subset it shows.
+            if title_parts:
+                base_title = new_spec.get("title", "")
+                joined = ", ".join(title_parts)
+                new_spec["title"] = (
+                    f"{base_title} - {joined}" if base_title else joined
+                )
             # Drop split_by on the expanded specs - we've already split.
             new_spec.pop("split_by", None)
             out.append(new_spec)
 
     return out
+
+
+def title_suffix_for_series_by(series_by: list[str] | None) -> str:
+    """Build the " - by LOT / by bias" suffix for a plot that has multiple
+    series along ``series_by`` dimensions.
+
+    Returns an empty string when ``series_by`` is empty/None. The plotter
+    is expected to concatenate this onto the user-supplied ``title``.
+    """
+    if not series_by:
+        return ""
+    labels: list[str] = []
+    for dim in series_by:
+        if dim == "lot":
+            labels.append("LOT")
+        elif dim == "bias":
+            labels.append("bias")
+    if not labels:
+        return ""
+    return " - by " + " & ".join(labels)
 
 
 def _check_unique_output_name(

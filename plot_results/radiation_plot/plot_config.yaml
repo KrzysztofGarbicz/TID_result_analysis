@@ -30,7 +30,31 @@
 #                        (see `bias_groups:` in dose_map.yaml)
 #   split_by           : emit one PNG per group along this dimension.
 #                        Accepts "lot", "bias", or both: [lot, bias].
-#                        Combines with `variants:`.
+#                        Combines with `variants:`. The split group name
+#                        is automatically appended to `title`.
+#   series_by          : draw multiple SERIES on a single PNG, one per
+#                        group along this dimension. Accepts the same
+#                        tokens as split_by ("lot", "bias", or both).
+#                        Multiplies with `metric:` when given a list -
+#                        e.g. 2 metrics x 2 lots = 4 series.
+#   show_before_at_zero: (absolute only) plot before_irradiate values
+#                        again at x=0 kRad as a baseline marker.
+#                        Default: true when before_irradiate is in
+#                        `stages`, false otherwise.
+#   reference_lines    : list of guide lines. Each entry has `y:`
+#                        (horizontal) OR `x:` (vertical) plus optional
+#                        `label`, `color` (default red), `linestyle`
+#                        (default '--'). Useful for spec limits, e.g.
+#                        +/-8 % I_lim accuracy band.
+#   subplots           : list of panel specs - each one renders to its
+#                        own Axes inside a single PNG. Each subplot
+#                        inherits the parent's fields except `title` and
+#                        may override filters, limits, series_by, etc.
+#                        Works on `absolute` and `delta` plots.
+#   subplot_layout     : "rows" (default, stacked), "cols" (side-by-side)
+#                        or "grid".
+#   share_x, share_y   : whether subplot Axes share an axis. Defaults:
+#                        share_x=true, share_y=false.
 #   x_scale / y_scale  : "linear" (default), "log", or "symlog".
 #                        On annealing plots only y_scale is honoured
 #                        (the X axis is categorical: stage names).
@@ -66,9 +90,9 @@ defaults:
   stage_labels:
     before_irradiate: "Before"
     after_irradiate: "After"
-    annealing_24h_25c: "24h @ 25 C"
-    annealing_168h_25c: "168h @ 25 C"
-    annealing_168h_100c: "168h @ 100 C"
+    annealing_24h_25c: "24h @ 25°C"
+    annealing_168h_25c: "168h @ 25°C"
+    annealing_168h_100c: "168h @ 100°C"
   # Stage color/marker mapping (used by absolute plots)
   stage_styles:
     before_irradiate:    { color: "#1f77b4", marker: "o" }
@@ -81,17 +105,101 @@ defaults:
 plots:
 
   # =============================================================
-  # TPS2553 - Quiescent current
+  # TPS2553
   # =============================================================
 
-  - name: "TPS2553_iq_absolute_stats"
+  - name: "TPS2553_enable_input_hysteresis_absolute"
+    type: absolute
+    title: "TPS2553 - Enable hysteresis vs dose"
+    lcl_name: TPS2553
+    measurement_type: enable_input_hysteresis
+    metric: [measured_falling_v, measured_rising_v]  # Lista metryk - każda w innym kolorze
+    stages: [after_irradiate]  # Tylko After
+    x_scale: log
+    y_label: "V_en [V]"
+    note: ""
+    variants:
+      - suffix: "_baseline"
+        # Wariant podstawowy - bez podziału
+        show_points: true
+        show_lines: [max, min]
+      - suffix: "_series_by_lot"
+        series_by: lot
+        show_points: true
+        show_lines: [max, min]
+      - suffix: "_series_by_bias"
+        series_by: bias
+        show_points: true
+        show_lines: [max, min]
+
+  - name: "TPS2553_rdson_absolute"
+    type: absolute
+    lcl_name: TPS2553
+    measurement_type: rdson
+    metric: rdson_mohm
+    stages: [after_irradiate]
+    x_scale: log
+    y_label: "R_DS(ON) [mOhm]"
+    subplots:
+      - title: "TPS2553 - R_DS(ON) at I_load = 0.1 A"
+        context_key: "iload_a=0.1"
+      - title: "TPS2553 - R_DS(ON) at I_load = 0.5 A"
+        context_key: "iload_a=0.5"
+      - title: "TPS2553 - R_DS(ON) at I_load = 1.0 A"
+        context_key: "iload_a=1.0"
+    subplot_layout: grid
+
+  - name: "TPS2553_rdson_delta"
+    type: delta
+    title: "Delta R_DS(ON) (before_irradiate → after_irradiate)"
+    lcl_name: TPS2553
+    measurement_type: rdson
+    metric: rdson_mohm
+    delta_from: before_irradiate
+    delta_to: after_irradiate
+    delta_mode: relative_percent
+    x_scale: log
+    y_label: "Delta R_DS(ON) [%]"
+    y_lim: [-10, 10]
+    subplots:
+      - title: "TPS2553 - R_DS(ON) at I_load = 0.1 A"
+        context_key: "iload_a=0.1"
+      - title: "TPS2553 - R_DS(ON) at I_load = 0.5 A"
+        context_key: "iload_a=0.5"
+      - title: "TPS2553 - R_DS(ON) at I_load = 1.0 A"
+        context_key: "iload_a=1.0"
+    subplot_layout: grid
+
+
+  - name: "TPS2553_iq_absolute"
     type: absolute
     title: "TPS2553 - Quiescent current vs dose"
     lcl_name: TPS2553
     measurement_type: iquiescent
     metric: iq_ua
-    stages: [before_irradiate, after_irradiate]
+    stages: [after_irradiate]
+    x_scale: log
     y_label: "I_Q [uA]"
+    variants:
+      - suffix: "_baseline"
+        # Wariant podstawowy - bez podziału
+        show_points: true
+        show_lines: [max, min]
+      # Subplots: górny panel LOT A, dolny panel LOT B (per-panel limity).
+      - suffix: "_subplots_by_lot"
+        subplots:
+          - title: "LOT A"
+            lot: A
+            series_by: bias
+          - title: "LOT B"
+            lot: B
+            series_by: bias
+        subplot_layout: rows
+        share_x: true
+        share_y: true
+        y_scale: log
+        figsize: [10, 10]
+        show_lines: [max, min]
 
   - name: "TPS2553_iq_delta"
     type: delta
@@ -101,155 +209,265 @@ plots:
     metric: iq_ua
     delta_from: before_irradiate
     delta_to: after_irradiate
+    delta_mode: relative_percent
+    x_scale: log
+    y_scale: symlog
+    y_label: "Delta I_Q [%]"
+    show_lines: [mean]
+    series_by: bias
 
-  # Same delta, but split into 4 PNGs: per (lot, bias) combination.
-  - name: "TPS2553_iq_delta_by_lot_bias"
-    type: delta
-    title: "TPS2553 - Delta I_Q (after - before)"
+  - name: "TPS2553_ish_absolute"
+    type: absolute
+    title: "TPS2553 - I_SH vs dose"
     lcl_name: TPS2553
-    measurement_type: iquiescent
-    metric: iq_ua
+    measurement_type: ishutdown
+    metric: ish_ua
+    stages: [after_irradiate]
+    x_scale: log
+    y_label: "I_SH [uA]"
+    variants:
+      - suffix: "_baseline"
+        # Wariant podstawowy - bez podziału
+        show_points: true
+        show_lines: [max, min]
+      # Subplots: górny panel LOT A, dolny panel LOT B (per-panel limity).
+      - suffix: "_subplots_by_lot"
+        subplots:
+          - title: "LOT A"
+            lot: A
+            series_by: bias
+          - title: "LOT B"
+            lot: B
+            series_by: bias
+        subplot_layout: rows
+        share_x: true
+        share_y: true
+        y_scale: log
+        figsize: [10, 10]
+        show_lines: [max, min]
+
+  - name: "TPS2553_ish_delta"
+    type: delta
+    title: "TPS2553 - Delta I_SH (after - before) [%]"
+    lcl_name: TPS2553
+    measurement_type: ishutdown
+    metric: ish_ua
     delta_from: before_irradiate
     delta_to: after_irradiate
-    split_by: [lot, bias]
-
-  # Absolute plot with log X-axis (helpful when dose spans 1..40 kRad).
-  - name: "TPS2553_iq_absolute_logdose"
-    type: absolute
-    title: "TPS2553 - I_Q vs dose (log dose)"
-    lcl_name: TPS2553
-    measurement_type: iquiescent
-    metric: iq_ua
-    stages: [before_irradiate, after_irradiate]
-    y_label: "I_Q [uA]"
+    delta_mode: relative_percent
     x_scale: log
+    y_scale: symlog
+    show_lines: [mean]
+    y_label: "Delta I_SH [%]"
+    series_by: bias
 
-  # Same data, two views via variants (one stats-only PNG, one points-only PNG)
-  - name: "TPS2553_iq_views"
+  - name: TPS2553_ilim_accuracy_upper_trip_absolute
     type: absolute
-    title: "TPS2553 - Quiescent current"
+    title: TPS2553 - upper_trip_a vs dose
+    note: 25krad działał tylko unbias a 40krad nie dzialaja wcale
     lcl_name: TPS2553
-    measurement_type: iquiescent
-    metric: iq_ua
-    stages: [before_irradiate, after_irradiate]
-    y_label: "I_Q [uA]"
-    variants:
-      - suffix: "_stats_only"
-        show_points: false
-        show_lines: [min, max, mean]
-      - suffix: "_points_only"
-        show_points: true
-        show_lines: []
+    measurement_type: ilim_accuracy
+    metric: upper_trip_a
+    stages: [after_irradiate]
+    y_label: upper_trip_a [A]
+    x_scale: log
+    show_lines:
+    - mean
+    subplots:
+    - title: "I_load = 0.120 A"
+      context_key: target_ilim_a=0.12
+      reference_lines:
+      - y: 0.11
+        label: ±8% target
+      - y: 0.13
+    - title: "I_load = 0.500 A"
+      context_key: target_ilim_a=0.5
+      reference_lines:
+      - y: 0.46
+        label: ±8% target
+      - y: 0.54
+    - title: "I_load = 1.000 A"
+      context_key: target_ilim_a=1.0
+      reference_lines:
+      - y: 0.92
+        label: ±8% target
+      - y: 1.08
+    - title: "I_load = 1.700 A"
+      context_key: target_ilim_a=1.7
+      reference_lines:
+      - y: 1.56
+        label: ±8% target
+      - y: 1.84
+    subplot_layout: grid
+
+
+        
+  # - name: "TPS2553_iq_absolute_stats"
+  #   type: absolute
+  #   title: "TPS2553 - Quiescent current vs dose"
+  #   lcl_name: TPS2553
+  #   measurement_type: iquiescent
+  #   metric: iq_ua
+  #   stages: [before_irradiate, after_irradiate]
+  #   y_label: "I_Q [uA]"
+
+  # - name: "TPS2553_iq_delta"
+  #   type: delta
+  #   title: "TPS2553 - Delta I_Q (after - before) [%]"
+  #   lcl_name: TPS2553
+  #   measurement_type: iquiescent
+  #   metric: iq_ua
+  #   delta_from: before_irradiate
+  #   delta_to: after_irradiate
+
+  # # Same delta, but split into 4 PNGs: per (lot, bias) combination.
+  # - name: "TPS2553_iq_delta_by_lot_bias"
+  #   type: delta
+  #   title: "TPS2553 - Delta I_Q (after - before)"
+  #   lcl_name: TPS2553
+  #   measurement_type: iquiescent
+  #   metric: iq_ua
+  #   delta_from: before_irradiate
+  #   delta_to: after_irradiate
+  #   split_by: [lot, bias]
+
+  # # Absolute plot with log X-axis (helpful when dose spans 1..40 kRad).
+  # - name: "TPS2553_iq_absolute_logdose"
+  #   type: absolute
+  #   title: "TPS2553 - I_Q vs dose (log dose)"
+  #   lcl_name: TPS2553
+  #   measurement_type: iquiescent
+  #   metric: iq_ua
+  #   stages: [before_irradiate, after_irradiate]
+  #   y_label: "I_Q [uA]"
+  #   x_scale: log
+
+  # # Same data, two views via variants (one stats-only PNG, one points-only PNG)
+  # - name: "TPS2553_iq_views"
+  #   type: absolute
+  #   title: "TPS2553 - Quiescent current"
+  #   lcl_name: TPS2553
+  #   measurement_type: iquiescent
+  #   metric: iq_ua
+  #   stages: [before_irradiate, after_irradiate]
+  #   y_label: "I_Q [uA]"
+  #   variants:
+  #     - suffix: "_stats_only"
+  #       show_points: false
+  #       show_lines: [min, max, mean]
+  #     - suffix: "_points_only"
+  #       show_points: true
+  #       show_lines: []
 
   # =============================================================
   # TPS2553 - R_DS(ON) - context_key required (three load currents)
   # =============================================================
 
-  - name: "TPS2553_rdson_iload_1A"
-    type: absolute
-    title: "TPS2553 - R_DS(ON) at I_load = 1.0 A"
-    lcl_name: TPS2553
-    measurement_type: rdson
-    metric: rdson_mohm
-    context_key: "iload_a=1.0"
-    stages: [before_irradiate, after_irradiate]
-    y_label: "R_DS(ON) [mOhm]"
+  # - name: "TPS2553_rdson_iload_1A"
+  #   type: absolute
+  #   title: "TPS2553 - R_DS(ON) at I_load = 1.0 A"
+  #   lcl_name: TPS2553
+  #   measurement_type: rdson
+  #   metric: rdson_mohm
+  #   context_key: "iload_a=1.0"
+  #   stages: [before_irradiate, after_irradiate]
+  #   y_label: "R_DS(ON) [mOhm]"
 
-  - name: "TPS2553_rdson_iload_0p5A_delta"
-    type: delta
-    title: "TPS2553 - Delta R_DS(ON) at I_load = 0.5 A"
-    lcl_name: TPS2553
-    measurement_type: rdson
-    metric: rdson_mohm
-    context_key: "iload_a=0.5"
-    delta_from: before_irradiate
-    delta_to: after_irradiate
-    delta_mode: absolute
-    y_label: "delta R_DS(ON) [mOhm]"
+  # - name: "TPS2553_rdson_iload_0p5A_delta"
+  #   type: delta
+  #   title: "TPS2553 - Delta R_DS(ON) at I_load = 0.5 A"
+  #   lcl_name: TPS2553
+  #   measurement_type: rdson
+  #   metric: rdson_mohm
+  #   context_key: "iload_a=0.5"
+  #   delta_from: before_irradiate
+  #   delta_to: after_irradiate
+  #   delta_mode: absolute
+  #   y_label: "delta R_DS(ON) [mOhm]"
 
   # =============================================================
   # TPS259474 - timing measurements (from oscilloscope)
   # =============================================================
 
-  - name: "TPS259474_time_on_10pct"
-    type: absolute
-    title: "TPS259474 - Turn-on time to 10% V_OUT"
-    lcl_name: TPS259474
-    measurement_type: timing_time_on
-    metric: time_to_10pct
-    stages: [before_irradiate, after_irradiate]
-    y_label: "Time [ms]"
+  # - name: "TPS259474_time_on_10pct"
+  #   type: absolute
+  #   title: "TPS259474 - Turn-on time to 10% V_OUT"
+  #   lcl_name: TPS259474
+  #   measurement_type: timing_time_on
+  #   metric: time_to_10pct
+  #   stages: [before_irradiate, after_irradiate]
+  #   y_label: "Time [ms]"
 
-  - name: "TPS259474_time_on_slew_rate"
-    type: absolute
-    title: "TPS259474 - V_OUT slew rate on turn-on"
-    lcl_name: TPS259474
-    measurement_type: timing_time_on
-    metric: vout_slew_rate
-    stages: [before_irradiate, after_irradiate]
-    y_label: "Slew rate [V/ms]"
+  # - name: "TPS259474_time_on_slew_rate"
+  #   type: absolute
+  #   title: "TPS259474 - V_OUT slew rate on turn-on"
+  #   lcl_name: TPS259474
+  #   measurement_type: timing_time_on
+  #   metric: vout_slew_rate
+  #   stages: [before_irradiate, after_irradiate]
+  #   y_label: "Slew rate [V/ms]"
 
   # =============================================================
   # TPS25963 - Annealing recovery plots
   # =============================================================
 
-  - name: "TPS25963_iq_annealing"
-    type: annealing
-    title: "TPS25963 - I_Q recovery during annealing"
-    lcl_name: TPS25963
-    measurement_type: iquiescent
-    metric: iq_ua
-    stages_order:
-      - before_irradiate
-      - after_irradiate
-      - annealing_24h_25c
-      - annealing_168h_25c
-      - annealing_168h_100c
-    y_label: "I_Q [uA]"
+  # - name: "TPS25963_iq_annealing"
+  #   type: annealing
+  #   title: "TPS25963 - I_Q recovery during annealing"
+  #   lcl_name: TPS25963
+  #   measurement_type: iquiescent
+  #   metric: iq_ua
+  #   stages_order:
+  #     - before_irradiate
+  #     - after_irradiate
+  #     - annealing_24h_25c
+  #     - annealing_168h_25c
+  #     - annealing_168h_100c
+  #   y_label: "I_Q [uA]"
 
-  # Same annealing plot but limited to high-dose samples only
-  - name: "TPS25963_iq_annealing_high_dose"
-    type: annealing
-    title: "TPS25963 - I_Q annealing - 15 / 25 kRad only"
-    lcl_name: TPS25963
-    measurement_type: iquiescent
-    metric: iq_ua
-    stages_order:
-      - before_irradiate
-      - after_irradiate
-      - annealing_24h_25c
-      - annealing_168h_25c
-      - annealing_168h_100c
-    include_doses: [15, 25]
-    y_label: "I_Q [uA]"
+  # # Same annealing plot but limited to high-dose samples only
+  # - name: "TPS25963_iq_annealing_high_dose"
+  #   type: annealing
+  #   title: "TPS25963 - I_Q annealing - 15 / 25 kRad only"
+  #   lcl_name: TPS25963
+  #   measurement_type: iquiescent
+  #   metric: iq_ua
+  #   stages_order:
+  #     - before_irradiate
+  #     - after_irradiate
+  #     - annealing_24h_25c
+  #     - annealing_168h_25c
+  #     - annealing_168h_100c
+  #   include_doses: [15, 25]
+  #   y_label: "I_Q [uA]"
 
-  # Annealing split per lot (-> two PNGs: ..._lotA, ..._lotB).
-  - name: "TPS25963_iq_annealing_by_lot"
-    type: annealing
-    title: "TPS25963 - I_Q annealing per lot"
-    lcl_name: TPS25963
-    measurement_type: iquiescent
-    metric: iq_ua
-    stages_order:
-      - before_irradiate
-      - after_irradiate
-      - annealing_24h_25c
-      - annealing_168h_25c
-      - annealing_168h_100c
-    y_label: "I_Q [uA]"
-    split_by: lot
+  # # Annealing split per lot (-> two PNGs: ..._lotA, ..._lotB).
+  # - name: "TPS25963_iq_annealing_by_lot"
+  #   type: annealing
+  #   title: "TPS25963 - I_Q annealing per lot"
+  #   lcl_name: TPS25963
+  #   measurement_type: iquiescent
+  #   metric: iq_ua
+  #   stages_order:
+  #     - before_irradiate
+  #     - after_irradiate
+  #     - annealing_24h_25c
+  #     - annealing_168h_25c
+  #     - annealing_168h_100c
+  #   y_label: "I_Q [uA]"
+  #   split_by: lot
 
-  - name: "TPS25963_rdson_annealing"
-    type: annealing
-    title: "TPS25963 - R_DS(ON) recovery at I_load = 1.0 A"
-    lcl_name: TPS25963
-    measurement_type: rdson
-    metric: rdson_mohm
-    context_key: "iload_a=1.0"
-    stages_order:
-      - before_irradiate
-      - after_irradiate
-      - annealing_24h_25c
-      - annealing_168h_25c
-      - annealing_168h_100c
-    y_label: "R_DS(ON) [mOhm]"
+  # - name: "TPS25963_rdson_annealing"
+  #   type: annealing
+  #   title: "TPS25963 - R_DS(ON) recovery at I_load = 1.0 A"
+  #   lcl_name: TPS25963
+  #   measurement_type: rdson
+  #   metric: rdson_mohm
+  #   context_key: "iload_a=1.0"
+  #   stages_order:
+  #     - before_irradiate
+  #     - after_irradiate
+  #     - annealing_24h_25c
+  #     - annealing_168h_25c
+  #     - annealing_168h_100c
+  #   y_label: "R_DS(ON) [mOhm]"
